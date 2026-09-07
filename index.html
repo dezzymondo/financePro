@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinancePro — Your Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#101c19">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FinancePro">
+</head>
+<body>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark"><span>Finance</span><span>Pro</span></div>
+      <div class="brand-sub">your ledger, kept honestly</div>
+    </div>
+    <nav id="nav">
+      <button class="nav-item active" data-section="dashboard">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 9L6 5L9 8L14 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13.5H14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-section="transactions">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6H11.5M4.5 8.5H11.5M4.5 11H8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Transactions
+      </button>
+      <button class="nav-item" data-section="analytics">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13V7.5M8 13V3M13 13V9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Analytics
+      </button>
+      <button class="nav-item" data-section="budgets">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5V8L10 9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Budgets
+      </button>
+      <button class="nav-item" data-section="goals">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M8 2C6 2 5 3.2 3.5 3.2C3.5 3.2 3.5 6 3.5 6C5 6 6 7.2 8 7.2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        Savings Goals
+      </button>
+      <button class="nav-item" data-section="settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.5V4M8 12V13.5M13.5 8H12M4 8H2.5M11.6 4.4L10.6 5.4M5.4 10.6L4.4 11.6M11.6 11.6L10.6 10.6M5.4 5.4L4.4 4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Settings
+      </button>
+    </nav>
+    <div class="rail-foot">Stored locally on this device. No account, no server.</div>
+  </aside>
+
+  <main>
+
+    <!-- DASHBOARD -->
+    <section class="section active" id="dashboard">
+      <div class="section-head">
+        <h1>Dashboard</h1>
+        <p>Where things stand today.</p>
+      </div>
+
+      <div class="hero">
+        <div class="hero-label">Current balance</div>
+        <div class="hero-amount"><span class="cur mono" id="dashCur">₦</span><span class="mono" id="dashBalance">0.00</span></div>
+      </div>
+
+      <div class="strip">
+        <div class="strip-item income">
+          <div class="k">Total income</div>
+          <div class="v mono" id="dashIncome">0.00</div>
+        </div>
+        <div class="strip-item expense">
+          <div class="k">Total expenses</div>
+          <div class="v mono" id="dashExpense">0.00</div>
+        </div>
+        <div class="strip-item count">
+          <div class="k">Entries logged</div>
+          <div class="v mono" id="dashCount">0</div>
+        </div>
+      </div>
+
+      <div class="row-between">
+        <h3 style="margin:0; font-size:16px; font-weight:500;">Recent activity</h3>
+        <button class="btn btn-primary" onclick="goTo('transactions'); openForm();">+ New entry</button>
+      </div>
+      <div class="ledger" id="dashRecent"></div>
+    </section>
+
+    <!-- TRANSACTIONS -->
+    <section class="section" id="transactions">
+      <div class="section-head row-between">
+        <div>
+          <h1>Transactions</h1>
+          <p>Every entry in the book, searchable and sortable.</p>
+        </div>
+        <button class="btn btn-primary" id="toggleFormBtn" onclick="openForm()">+ New entry</button>
+      </div>
+
+      <div class="panel" id="txPanel">
+        <h3>New entry</h3>
+        <div class="type-toggle" id="typeToggle">
+          <button type="button" data-type="expense" class="on">Expense</button>
+          <button type="button" data-type="income">Income</button>
+        </div>
+        <div class="form-grid" style="margin-top:16px;">
+          <div class="field">
+            <label for="txAmount">Amount</label>
+            <input type="number" id="txAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label for="txCategory">Category</label>
+            <select id="txCategory"></select>
+          </div>
+          <div class="field full">
+            <label for="txDesc">Description</label>
+            <input type="text" id="txDesc" placeholder="e.g. Market run, rent, freelance payment">
+          </div>
+          <div class="field">
+            <label for="txDate">Date</label>
+            <input type="date" id="txDate">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" onclick="submitTransaction()">Save entry</button>
+          <button class="btn" onclick="closeForm()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-wrap"><input type="text" id="searchInput" placeholder="Search transactions…" oninput="renderTransactions()"></div>
+        <select id="filterCategory" onchange="renderTransactions()"><option value="all">All categories</option></select>
+        <select id="filterType" onchange="renderTransactions()">
+          <option value="all">All types</option>
+          <option value="income">Income only</option>
+          <option value="expense">Expenses only</option>
+        </select>
+        <select id="sortOrder" onchange="renderTransactions()">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="highest">Highest amount</option>
+          <option value="lowest">Lowest amount</option>
+        </select>
+      </div>
+
+      <div class="ledger" id="txList"></div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section class="section" id="analytics">
+      <div class="section-head">
+        <h1>Analytics</h1>
+        <p>Where the money actually goes.</p>
+      </div>
+      <div class="two-col">
+        <div>
+          <h3 style="font-size:15px; font-weight:500; margin-bottom:2px;">Spending by category</h3>
+          <div class="bar-list" id="analyticsBars"></div>
+        </div>
+        <div>
+          <h3 style="font-size:15px; font-weight:500; margin-bottom:2px;">This month, in short</h3>
+          <div class="strip" style="flex-direction:column; border-bottom:none;">
+            <div class="strip-item income" style="margin-right:0;">
+              <div class="k">Income</div>
+              <div class="v mono" id="anIncome">0.00</div>
+            </div>
+            <div class="strip-item expense" style="margin-right:0;">
+              <div class="k">Expenses</div>
+              <div class="v mono" id="anExpense">0.00</div>
+            </div>
+            <div class="strip-item" style="margin-right:0;">
+              <div class="k">Net</div>
+              <div class="v mono" id="anNet">0.00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BUDGETS -->
+    <section class="section" id="budgets">
+      <div class="section-head row-between">
+        <div>
+          <h1>Budgets</h1>
+          <p>Set a limit per category, watch it as the month goes.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openBudgetForm()">+ Set budget</button>
+      </div>
+
+      <div class="panel" id="budgetPanel">
+        <h3>Set a budget</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="budgetCategory">Category</label>
+            <select id="budgetCategory"></select>
+          </div>
+          <div class="field">
+            <label for="budgetAmount">Monthly limit</label>
+            <input type="number" id="budgetAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" onclick="submitBudget()">Save budget</button>
+          <button class="btn" onclick="closeBudgetForm()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="item-list" id="budgetList"></div>
+    </section>
+
+    <!-- GOALS -->
+    <section class="section" id="goals">
+      <div class="section-head row-between">
+        <div>
+          <h1>Savings Goals</h1>
+          <p>Name what you're saving for. Watch it get closer.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openGoalForm()">+ New goal</button>
+      </div>
+
+      <div class="panel" id="goalPanel">
+        <h3>New savings goal</h3>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="goalName">Goal name</label>
+            <input type="text" id="goalName" placeholder="e.g. Emergency fund, new laptop">
+          </div>
+          <div class="field">
+            <label for="goalTarget">Target amount</label>
+            <input type="number" id="goalTarget" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label for="goalSaved">Already saved</label>
+            <input type="number" id="goalSaved" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" onclick="submitGoal()">Save goal</button>
+          <button class="btn" onclick="closeGoalForm()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="item-list" id="goalList"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="section" id="settings">
+      <div class="section-head">
+        <h1>Settings</h1>
+        <p>Small preferences, kept simple.</p>
+      </div>
+
+      <div class="settings-block">
+        <h3>Currency</h3>
+        <p>Choose the symbol used across your ledger.</p>
+        <div class="currency-options" id="currencyOptions"></div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Reset data</h3>
+        <p>Clears every transaction, budget, and goal from this device. This can't be undone.</p>
+        <button class="btn" style="border-color:var(--expense); color:var(--expense);" onclick="resetAll()">Clear all data</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="script.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
