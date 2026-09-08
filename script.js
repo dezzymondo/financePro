@@ -73,9 +73,13 @@ function firebaseAuthMessage(error){
     'auth/invalid-credential':'Email or password is incorrect.',
     'auth/email-already-in-use':'An account with that email already exists.',
     'auth/weak-password':'Use a password with at least 6 characters.',
-    'auth/popup-closed-by-user':'Google sign-in was cancelled.'
+    'auth/popup-closed-by-user':'Google sign-in was cancelled.',
+    'auth/operation-not-allowed':'This sign-in method is disabled. Enable it in Firebase Console → Authentication → Sign-in providers.',
+    'auth/unauthorized-domain':'This website is not authorized. Add financepro-4299f.web.app under Firebase Authentication → Settings → Authorized domains.',
+    'auth/network-request-failed':'Network error. Check your internet connection and try again.',
+    'auth/too-many-requests':'Too many attempts. Wait a few minutes and try again.'
   };
-  return messages[error.code] || 'Authentication failed. Please try again.';
+  return messages[error.code] || `Authentication failed (${error.code || 'unknown error'}). Please try again.`;
 }
 async function signInWithGoogle(){
   setAuthError('');
