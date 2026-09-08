@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v3';
+const CACHE_NAME = 'financepro-v4';
 const ASSETS = [
   './index.html',
   './style.css',

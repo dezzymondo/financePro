@@ -17,6 +17,18 @@
 </head>
 <body>
 
+<!-- WELCOME MODAL (first visit only) -->
+<div class="modal-overlay" id="welcomeOverlay">
+  <div class="modal-card">
+    <div class="brand-mark" style="margin-bottom:6px;"><span>Finance</span><span>Pro</span></div>
+    <h2>Welcome to your ledger.</h2>
+    <p>FinancePro doesn't connect to your bank — it's a place you log money by hand, the moment it moves. Get paid, spend on food, send a transfer: add it here as an entry.</p>
+    <p>Over time that builds a real picture: your balance, where money actually goes each month, whether you're within budget, and how close you are to what you're saving for.</p>
+    <p style="color:var(--ink-faint); font-size:12.5px;">Everything is stored only on this device. Nobody else can see it — but that also means it's worth exporting a backup now and then (Settings → Export).</p>
+    <button class="btn btn-primary" style="margin-top:8px;" onclick="dismissWelcome()">Get started</button>
+  </div>
+</div>
+
 <div class="shell">
   <aside class="rail">
     <div class="brand">
@@ -59,6 +71,10 @@
       <div class="section-head">
         <h1>Dashboard</h1>
         <p>Where things stand today.</p>
+        <button class="info-toggle" onclick="toggleInfo('info-dashboard')">ⓘ How this works</button>
+        <div class="info-panel" id="info-dashboard">
+          This is your balance at a glance — every income entry minus every expense entry you've logged, all time. It updates the moment you add, edit, or delete a transaction. "Recent activity" below shows your last few entries; tap "+ New entry" any time money moves.
+        </div>
       </div>
 
       <div class="hero">
@@ -94,8 +110,18 @@
         <div>
           <h1>Transactions</h1>
           <p>Every entry in the book, searchable and sortable.</p>
+          <button class="info-toggle" onclick="toggleInfo('info-transactions')">ⓘ How this works</button>
+          <div class="info-panel" id="info-transactions">
+            Log every entry the moment money moves — income or expense, with an amount, category, and date. Use Quick Add below for things you log often, so you don't retype them each time. Check "Repeat monthly" while adding an entry to have it log itself automatically every month (rent, salary, subscriptions). Tap the pencil on any entry to edit it, or ✕ to delete it — you'll get a few seconds to undo.
+          </div>
         </div>
         <button class="btn btn-primary" id="toggleFormBtn" onclick="openForm()">+ New entry</button>
+      </div>
+
+      <!-- QUICK ADD TEMPLATES -->
+      <div class="quickadd-wrap" id="quickAddWrap" style="display:none;">
+        <div class="quickadd-label">Quick add</div>
+        <div class="quickadd-chips" id="quickAddChips"></div>
       </div>
 
       <div class="panel" id="txPanel">
@@ -122,9 +148,21 @@
             <input type="date" id="txDate">
           </div>
         </div>
+        <div class="check-row" id="txExtrasRow">
+          <label class="check-item"><input type="checkbox" id="txSaveTemplate"> Save as quick-add template</label>
+          <label class="check-item"><input type="checkbox" id="txRecurring"> Repeat monthly</label>
+        </div>
         <div class="panel-actions">
           <button class="btn btn-primary" id="txSaveBtn" onclick="submitTransaction()">Save entry</button>
           <button class="btn" onclick="closeForm()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- RECURRING RULES -->
+      <div class="recurring-wrap" id="recurringWrap" style="display:none;">
+        <button class="info-toggle" onclick="toggleInfo('info-recurring')">ⓘ Recurring entries — tap to manage</button>
+        <div class="info-panel" id="info-recurring">
+          <div id="recurringList"></div>
         </div>
       </div>
 
@@ -152,6 +190,10 @@
       <div class="section-head">
         <h1>Analytics</h1>
         <p>Where the money actually goes.</p>
+        <button class="info-toggle" onclick="toggleInfo('info-analytics')">ⓘ How this works</button>
+        <div class="info-panel" id="info-analytics">
+          The chart compares income and expenses month over month, so you can see trends across time. Below it, "This month, by category" and the summary numbers reflect only the current calendar month — a fresh snapshot each month, not a running total.
+        </div>
       </div>
 
       <div class="row-between" style="margin-bottom:2px;">
@@ -194,6 +236,10 @@
         <div>
           <h1>Budgets</h1>
           <p>Set a limit per category, watch it as the month goes.</p>
+          <button class="info-toggle" onclick="toggleInfo('info-budgets')">ⓘ How this works</button>
+          <div class="info-panel" id="info-budgets">
+            Set a monthly spending limit for a category — say ₦20,000 for Food. As you log expense entries in that category this month, the bar fills up. Cross the limit and it's flagged as over budget. It resets naturally each month since it only counts the current month's spending.
+          </div>
         </div>
         <button class="btn btn-primary" onclick="openBudgetForm()">+ Set budget</button>
       </div>
@@ -225,6 +271,10 @@
         <div>
           <h1>Savings Goals</h1>
           <p>Name what you're saving for. Watch it get closer.</p>
+          <button class="info-toggle" onclick="toggleInfo('info-goals')">ⓘ How this works</button>
+          <div class="info-panel" id="info-goals">
+            Goals aren't pulled from your transactions automatically — they're separate and manual. Name something you're saving toward, set a target, then tap "Add funds" whenever you set money aside for it. Good for tracking progress on something specific, like an emergency fund or a big purchase.
+          </div>
         </div>
         <button class="btn btn-primary" onclick="openGoalForm()">+ New goal</button>
       </div>
@@ -259,6 +309,10 @@
       <div class="section-head">
         <h1>Settings</h1>
         <p>Small preferences, kept simple.</p>
+        <button class="info-toggle" onclick="toggleInfo('info-settings')">ⓘ How this works</button>
+        <div class="info-panel" id="info-settings">
+          Everything in FinancePro lives only in this browser on this device — there's no account and no server, so nobody else can see it, but it also means clearing your browser data would erase it permanently. Export a CSV backup now and then to keep a copy you control.
+        </div>
       </div>
 
       <div class="settings-block">
@@ -268,8 +322,14 @@
       </div>
 
       <div class="settings-block">
+        <h3>Backup your data</h3>
+        <p>Download every transaction as a CSV file — keep a copy somewhere safe, or open it in Excel/Sheets.</p>
+        <button class="btn" onclick="exportCSV()">Export as CSV</button>
+      </div>
+
+      <div class="settings-block">
         <h3>Reset data</h3>
-        <p>Clears every transaction, budget, and goal from this device. This can't be undone.</p>
+        <p>Clears every transaction, budget, goal, and template from this device. This can't be undone.</p>
         <button class="btn" style="border-color:var(--expense); color:var(--expense);" onclick="resetAll()">Clear all data</button>
       </div>
     </section>

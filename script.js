@@ -8,6 +8,8 @@ let state = {
   transactions: JSON.parse(localStorage.getItem('fp_transactions') || '[]'),
   budgets: JSON.parse(localStorage.getItem('fp_budgets') || '[]'),
   goals: JSON.parse(localStorage.getItem('fp_goals') || '[]'),
+  templates: JSON.parse(localStorage.getItem('fp_templates') || '[]'),
+  recurring: JSON.parse(localStorage.getItem('fp_recurring') || '[]'),
   currency: localStorage.getItem('fp_currency') || '₦'
 };
 
@@ -15,6 +17,8 @@ function persist(){
   localStorage.setItem('fp_transactions', JSON.stringify(state.transactions));
   localStorage.setItem('fp_budgets', JSON.stringify(state.budgets));
   localStorage.setItem('fp_goals', JSON.stringify(state.goals));
+  localStorage.setItem('fp_templates', JSON.stringify(state.templates));
+  localStorage.setItem('fp_recurring', JSON.stringify(state.recurring));
   localStorage.setItem('fp_currency', state.currency);
 }
 
@@ -38,6 +42,23 @@ function showUndoToast(message, undoFn){
 }
 function hideToast(){
   document.getElementById('toast').classList.remove('show');
+}
+
+/* ---------------- welcome modal (first visit) ---------------- */
+function showWelcomeIfNeeded(){
+  if(!localStorage.getItem('fp_seenWelcome')){
+    document.getElementById('welcomeOverlay').classList.add('show');
+  }
+}
+function dismissWelcome(){
+  localStorage.setItem('fp_seenWelcome', '1');
+  document.getElementById('welcomeOverlay').classList.remove('show');
+}
+
+/* ---------------- section info toggles ---------------- */
+function toggleInfo(id){
+  const panel = document.getElementById(id);
+  if(panel) panel.classList.toggle('open');
 }
 
 /* ---------------- nav ---------------- */
@@ -85,6 +106,9 @@ function openForm(){
   document.getElementById('txAmount').value = '';
   document.getElementById('txDesc').value = '';
   document.getElementById('txDate').value = todayISO();
+  document.getElementById('txSaveTemplate').checked = false;
+  document.getElementById('txRecurring').checked = false;
+  document.getElementById('txExtrasRow').style.display = 'flex';
   document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.toggle('on', b.dataset.type==='expense'));
   fillCategorySelect(document.getElementById('txCategory'), currentType);
 }
@@ -97,6 +121,7 @@ function editTransaction(id){
   document.getElementById('txPanelTitle').textContent = 'Edit entry';
   document.getElementById('txSaveBtn').textContent = 'Save changes';
   document.getElementById('txPanel').classList.add('open');
+  document.getElementById('txExtrasRow').style.display = 'none'; // template/recurring only apply when creating new
   document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.toggle('on', b.dataset.type===t.type));
   fillCategorySelect(document.getElementById('txCategory'), t.type);
   document.getElementById('txCategory').value = t.category;
@@ -124,10 +149,90 @@ function submitTransaction(){
     if(t){ t.type = currentType; t.amount = amount; t.category = category; t.desc = desc; t.date = date; }
   } else {
     state.transactions.push({ id:uid(), type:currentType, amount, category, desc, date });
+
+    if(document.getElementById('txSaveTemplate').checked){
+      const dup = state.templates.find(tp => tp.type===currentType && tp.category===category && tp.desc.toLowerCase()===desc.toLowerCase() && Number(tp.amount)===amount);
+      if(!dup) state.templates.push({ id:uid(), type:currentType, amount, category, desc });
+    }
+    if(document.getElementById('txRecurring').checked){
+      state.recurring.push({
+        id:uid(), type:currentType, amount, category, desc,
+        dayOfMonth: Number(date.slice(8,10)),
+        lastGeneratedMonth: date.slice(0,7) // this instance already covers its own month
+      });
+    }
   }
   persist();
   closeForm();
   renderAll();
+}
+
+/* ---------------- quick-add templates ---------------- */
+function useTemplate(id){
+  const tpl = state.templates.find(t=>t.id===id);
+  if(!tpl) return;
+  state.transactions.push({ id:uid(), type:tpl.type, amount:tpl.amount, category:tpl.category, desc:tpl.desc, date:todayISO() });
+  persist();
+  renderAll();
+  showUndoToast(`Added: ${tpl.desc}`, () => {
+    state.transactions.pop();
+    persist();
+    renderAll();
+  });
+}
+function deleteTemplate(id, ev){
+  if(ev) ev.stopPropagation();
+  state.templates = state.templates.filter(t=>t.id!==id);
+  persist();
+  renderAll();
+}
+function renderQuickAdd(){
+  const wrap = document.getElementById('quickAddWrap');
+  const box = document.getElementById('quickAddChips');
+  if(!state.templates.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  box.innerHTML = state.templates.map(t=>`
+    <div class="quickadd-chip" onclick="useTemplate('${t.id}')">
+      <span>${escapeHTML(t.desc)} · ${cur()}${fmt(t.amount)}</span>
+      <button class="qa-remove" onclick="deleteTemplate('${t.id}', event)" aria-label="Remove template">✕</button>
+    </div>`).join('');
+}
+
+/* ---------------- recurring transactions ---------------- */
+function generateDueRecurring(){
+  const nowKey = todayISO().slice(0,7);
+  let changed = false;
+  state.recurring.forEach(r=>{
+    if(r.lastGeneratedMonth < nowKey){
+      const [y,m] = nowKey.split('-');
+      const daysInMonth = new Date(Number(y), Number(m), 0).getDate();
+      const day = Math.min(r.dayOfMonth, daysInMonth);
+      const dateStr = `${nowKey}-${String(day).padStart(2,'0')}`;
+      state.transactions.push({ id:uid(), type:r.type, amount:r.amount, category:r.category, desc:r.desc, date:dateStr });
+      r.lastGeneratedMonth = nowKey;
+      changed = true;
+    }
+  });
+  if(changed) persist();
+}
+function stopRecurring(id){
+  state.recurring = state.recurring.filter(r=>r.id!==id);
+  persist();
+  renderAll();
+}
+function renderRecurring(){
+  const wrap = document.getElementById('recurringWrap');
+  const box = document.getElementById('recurringList');
+  if(!state.recurring.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  box.innerHTML = state.recurring.map(r=>`
+    <div class="recurring-row">
+      <div>
+        <div class="rr-info">${escapeHTML(r.desc)} — ${cur()}${fmt(r.amount)}</div>
+        <div class="rr-sub">${r.category} · logs on day ${r.dayOfMonth} of each month</div>
+      </div>
+      <button onclick="stopRecurring('${r.id}')">Stop repeating</button>
+    </div>`).join('');
 }
 
 function deleteTransaction(id){
@@ -406,18 +511,41 @@ function renderSettings(){
 }
 function setCurrency(c){ state.currency = c; persist(); renderAll(); }
 function resetAll(){
-  if(!confirm('Clear every transaction, budget, and goal? This cannot be undone.')) return;
-  state.transactions = []; state.budgets = []; state.goals = [];
+  if(!confirm('Clear every transaction, budget, goal, and template? This cannot be undone.')) return;
+  state.transactions = []; state.budgets = []; state.goals = []; state.templates = []; state.recurring = [];
   persist(); renderAll();
+}
+
+/* ---------------- CSV export ---------------- */
+function exportCSV(){
+  if(!state.transactions.length){ alert('No transactions to export yet.'); return; }
+  const rows = [['Date','Type','Category','Description','Amount']];
+  [...state.transactions].sort((a,b)=> new Date(a.date)-new Date(b.date)).forEach(t=>{
+    rows.push([t.date, t.type, t.category, t.desc.replace(/"/g,'""'), t.amount]);
+  });
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `financepro-export-${todayISO()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /* ---------------- render all ---------------- */
 function renderAll(){
   renderDashboard();
   renderTransactions();
+  renderQuickAdd();
+  renderRecurring();
   renderAnalytics();
   renderBudgets();
   renderGoals();
   renderSettings();
 }
+generateDueRecurring();
 renderAll();
+showWelcomeIfNeeded();
