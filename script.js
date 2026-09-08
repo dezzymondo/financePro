@@ -4,8 +4,6 @@ const CATEGORIES = {
   income: ['Salary','Freelance','Gift','Other']
 };
 
-const USERS_KEY = 'fp_users';
-const SESSION_KEY = 'fp_session';
 const DATA_FIELDS = ['transactions','budgets','goals','templates','recurring'];
 let currentUser = null;
 let authMode = 'login';
@@ -14,30 +12,22 @@ let state = createEmptyState();
 function createEmptyState(){
   return {transactions:[], budgets:[], goals:[], templates:[], recurring:[], currency:'₦'};
 }
-function getUsers(){
-  try { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); }
-  catch { return []; }
-}
-function saveUsers(users){ localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
-function userKey(field){ return `fp_${field}_${currentUser.id}`; }
-function loadUserState(migrateLegacy){
+function userDoc(){ return financeDb.collection('users').doc(currentUser.uid); }
+function loadLocalState(){
   state = createEmptyState();
   DATA_FIELDS.forEach(field=>{
-    const stored = localStorage.getItem(userKey(field));
-    const legacy = migrateLegacy ? localStorage.getItem(`fp_${field}`) : null;
-    if(stored !== null || legacy !== null){
-      try { state[field] = JSON.parse(stored !== null ? stored : legacy); } catch { state[field] = []; }
+    const stored = localStorage.getItem(`fp_${field}`);
+    if(stored !== null){
+      try { state[field] = JSON.parse(stored); } catch { state[field] = []; }
     }
   });
-  const storedCurrency = localStorage.getItem(userKey('currency'));
-  state.currency = storedCurrency || (migrateLegacy ? localStorage.getItem('fp_currency') : null) || '₦';
-  if(migrateLegacy) DATA_FIELDS.concat('currency').forEach(field=>localStorage.removeItem(`fp_${field}`));
+  state.currency = localStorage.getItem('fp_currency') || '₦';
 }
 
 function persist(){
   if(!currentUser) return;
-  DATA_FIELDS.forEach(field=>localStorage.setItem(userKey(field), JSON.stringify(state[field])));
-  localStorage.setItem(userKey('currency'), state.currency);
+  const data = {...state, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
+  userDoc().set(data, {merge:true}).catch(error=>setAuthError(`Could not save your data: ${error.message}`));
 }
 
 function fmt(n){
@@ -48,16 +38,6 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 function normalizeEmail(value){ return value.trim().toLowerCase(); }
-async function hashPassword(password){
-  if(window.crypto && window.crypto.subtle){
-    const bytes = new TextEncoder().encode(password);
-    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
-    return Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,'0')).join('');
-  }
-  let hash = 0;
-  for(let i=0; i<password.length; i++) hash = ((hash << 5) - hash) + password.charCodeAt(i) | 0;
-  return `fallback-${hash}`;
-}
 function setAuthError(message){ document.getElementById('authError').textContent = message; }
 function setAuthMode(mode){
   authMode = mode;
@@ -76,48 +56,59 @@ async function handleAuthSubmit(event){
   event.preventDefault();
   const email = normalizeEmail(document.getElementById('authEmail').value);
   const password = document.getElementById('authPassword').value;
-  const users = getUsers();
   setAuthError('');
-  if(authMode === 'signup'){
-    if(password !== document.getElementById('authConfirm').value){ setAuthError('Passwords do not match.'); return; }
-    if(users.some(user=>user.email===email)){ setAuthError('An account with that email already exists.'); return; }
-    const user = {id:uid(), email, passwordHash:await hashPassword(password)};
-    const firstAccount = users.length === 0;
-    users.push(user);
-    saveUsers(users);
-    startSession(user, firstAccount);
-    return;
+  try {
+    if(authMode === 'signup'){
+      if(password !== document.getElementById('authConfirm').value){ setAuthError('Passwords do not match.'); return; }
+      await financeAuth.createUserWithEmailAndPassword(email, password);
+    } else {
+      await financeAuth.signInWithEmailAndPassword(email, password);
+    }
+  } catch(error){
+    setAuthError(firebaseAuthMessage(error));
   }
-  const user = users.find(item=>item.email===email);
-  if(!user || user.passwordHash !== await hashPassword(password)){ setAuthError('Email or password is incorrect.'); return; }
-  startSession(user, false);
 }
-function startSession(user, migrateLegacy){
+function firebaseAuthMessage(error){
+  const messages = {
+    'auth/invalid-credential':'Email or password is incorrect.',
+    'auth/email-already-in-use':'An account with that email already exists.',
+    'auth/weak-password':'Use a password with at least 6 characters.',
+    'auth/popup-closed-by-user':'Google sign-in was cancelled.'
+  };
+  return messages[error.code] || 'Authentication failed. Please try again.';
+}
+async function signInWithGoogle(){
+  setAuthError('');
+  try { await financeAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+  catch(error){ setAuthError(firebaseAuthMessage(error)); }
+}
+async function startSession(user){
   currentUser = user;
-  localStorage.setItem(SESSION_KEY, user.id);
-  loadUserState(migrateLegacy);
+  const snapshot = await userDoc().get();
+  if(snapshot.exists){ state = {...createEmptyState(), ...snapshot.data()}; }
+  else { loadLocalState(); persist(); }
   document.getElementById('authGate').style.display = 'none';
-  document.getElementById('accountEmail').textContent = user.email;
+  document.getElementById('accountEmail').textContent = user.email || 'Google account';
   document.body.classList.remove('auth-locked');
   generateDueRecurring();
   renderAll();
   showWelcomeIfNeeded();
 }
 function signOut(){
-  localStorage.removeItem(SESSION_KEY);
-  currentUser = null;
-  state = createEmptyState();
-  document.getElementById('welcomeOverlay').classList.remove('show');
-  document.getElementById('authGate').style.display = 'flex';
-  document.getElementById('authForm').reset();
-  setAuthMode('login');
-  document.body.classList.add('auth-locked');
+  financeAuth.signOut();
 }
 function bootAuth(){
-  const sessionId = localStorage.getItem(SESSION_KEY);
-  const user = getUsers().find(item=>item.id===sessionId);
-  if(user) startSession(user, false);
-  else document.getElementById('authGate').style.display = 'flex';
+  financeAuth.onAuthStateChanged(user=>{
+    if(user) startSession(user);
+    else {
+      currentUser = null;
+      state = createEmptyState();
+      document.getElementById('welcomeOverlay').classList.remove('show');
+      document.getElementById('authGate').style.display = 'flex';
+      document.getElementById('authForm').reset();
+      setAuthMode('login');
+    }
+  });
 }
 
 /* ---------------- toast (undo) ---------------- */

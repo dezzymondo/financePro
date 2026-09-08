@@ -42,8 +42,9 @@
       </div>
       <div class="auth-error" id="authError" role="alert"></div>
       <button class="btn btn-primary auth-submit" id="authSubmit" type="submit">Log in</button>
+      <button class="btn auth-google" type="button" onclick="signInWithGoogle()">Continue with Google</button>
     </form>
-    <p class="auth-note">Accounts are stored in this browser only. This app has no server, so these credentials do not work on another device.</p>
+    <p class="auth-note">Your account and ledger are securely synced with Firebase across your devices.</p>
   </div>
 </div>
 
@@ -378,6 +379,23 @@
   <button id="toastUndo">Undo</button>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA55aE83L3dUdjpPTOvZdXrzntZmUGhnAQ",
+    authDomain: "financepro-4299f.firebaseapp.com",
+    projectId: "financepro-4299f",
+    storageBucket: "financepro-4299f.firebasestorage.app",
+    messagingSenderId: "477333877820",
+    appId: "1:477333877820:web:425ab5f2b8a4642c103f39",
+    measurementId: "G-J6W9N6SMND"
+  };
+  firebase.initializeApp(firebaseConfig);
+  window.financeAuth = firebase.auth();
+  window.financeDb = firebase.firestore();
+</script>
 <script src="script.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
