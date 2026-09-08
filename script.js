@@ -1,25 +1,43 @@
-/* ---------------- state ---------------- */
+/* ---------------- account and state ---------------- */
 const CATEGORIES = {
   expense: ['Food','Transport','Housing','Utilities','Entertainment','Health','Shopping','Other'],
   income: ['Salary','Freelance','Gift','Other']
 };
 
-let state = {
-  transactions: JSON.parse(localStorage.getItem('fp_transactions') || '[]'),
-  budgets: JSON.parse(localStorage.getItem('fp_budgets') || '[]'),
-  goals: JSON.parse(localStorage.getItem('fp_goals') || '[]'),
-  templates: JSON.parse(localStorage.getItem('fp_templates') || '[]'),
-  recurring: JSON.parse(localStorage.getItem('fp_recurring') || '[]'),
-  currency: localStorage.getItem('fp_currency') || '₦'
-};
+const USERS_KEY = 'fp_users';
+const SESSION_KEY = 'fp_session';
+const DATA_FIELDS = ['transactions','budgets','goals','templates','recurring'];
+let currentUser = null;
+let authMode = 'login';
+let state = createEmptyState();
+
+function createEmptyState(){
+  return {transactions:[], budgets:[], goals:[], templates:[], recurring:[], currency:'₦'};
+}
+function getUsers(){
+  try { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveUsers(users){ localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
+function userKey(field){ return `fp_${field}_${currentUser.id}`; }
+function loadUserState(migrateLegacy){
+  state = createEmptyState();
+  DATA_FIELDS.forEach(field=>{
+    const stored = localStorage.getItem(userKey(field));
+    const legacy = migrateLegacy ? localStorage.getItem(`fp_${field}`) : null;
+    if(stored !== null || legacy !== null){
+      try { state[field] = JSON.parse(stored !== null ? stored : legacy); } catch { state[field] = []; }
+    }
+  });
+  const storedCurrency = localStorage.getItem(userKey('currency'));
+  state.currency = storedCurrency || (migrateLegacy ? localStorage.getItem('fp_currency') : null) || '₦';
+  if(migrateLegacy) DATA_FIELDS.concat('currency').forEach(field=>localStorage.removeItem(`fp_${field}`));
+}
 
 function persist(){
-  localStorage.setItem('fp_transactions', JSON.stringify(state.transactions));
-  localStorage.setItem('fp_budgets', JSON.stringify(state.budgets));
-  localStorage.setItem('fp_goals', JSON.stringify(state.goals));
-  localStorage.setItem('fp_templates', JSON.stringify(state.templates));
-  localStorage.setItem('fp_recurring', JSON.stringify(state.recurring));
-  localStorage.setItem('fp_currency', state.currency);
+  if(!currentUser) return;
+  DATA_FIELDS.forEach(field=>localStorage.setItem(userKey(field), JSON.stringify(state[field])));
+  localStorage.setItem(userKey('currency'), state.currency);
 }
 
 function fmt(n){
@@ -28,6 +46,79 @@ function fmt(n){
 function cur(){ return state.currency; }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function normalizeEmail(value){ return value.trim().toLowerCase(); }
+async function hashPassword(password){
+  if(window.crypto && window.crypto.subtle){
+    const bytes = new TextEncoder().encode(password);
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,'0')).join('');
+  }
+  let hash = 0;
+  for(let i=0; i<password.length; i++) hash = ((hash << 5) - hash) + password.charCodeAt(i) | 0;
+  return `fallback-${hash}`;
+}
+function setAuthError(message){ document.getElementById('authError').textContent = message; }
+function setAuthMode(mode){
+  authMode = mode;
+  const signup = mode === 'signup';
+  document.getElementById('authTitle').textContent = signup ? 'Create your ledger.' : 'Welcome back.';
+  document.getElementById('authIntro').textContent = signup ? 'Start a private ledger on this device.' : 'Log in to pick up where you left off.';
+  document.getElementById('authSubmit').textContent = signup ? 'Create account' : 'Log in';
+  document.getElementById('authConfirmField').style.display = signup ? 'block' : 'none';
+  document.getElementById('authConfirm').required = signup;
+  document.getElementById('authPassword').autocomplete = signup ? 'new-password' : 'current-password';
+  document.getElementById('loginTab').classList.toggle('active', !signup);
+  document.getElementById('signupTab').classList.toggle('active', signup);
+  setAuthError('');
+}
+async function handleAuthSubmit(event){
+  event.preventDefault();
+  const email = normalizeEmail(document.getElementById('authEmail').value);
+  const password = document.getElementById('authPassword').value;
+  const users = getUsers();
+  setAuthError('');
+  if(authMode === 'signup'){
+    if(password !== document.getElementById('authConfirm').value){ setAuthError('Passwords do not match.'); return; }
+    if(users.some(user=>user.email===email)){ setAuthError('An account with that email already exists.'); return; }
+    const user = {id:uid(), email, passwordHash:await hashPassword(password)};
+    const firstAccount = users.length === 0;
+    users.push(user);
+    saveUsers(users);
+    startSession(user, firstAccount);
+    return;
+  }
+  const user = users.find(item=>item.email===email);
+  if(!user || user.passwordHash !== await hashPassword(password)){ setAuthError('Email or password is incorrect.'); return; }
+  startSession(user, false);
+}
+function startSession(user, migrateLegacy){
+  currentUser = user;
+  localStorage.setItem(SESSION_KEY, user.id);
+  loadUserState(migrateLegacy);
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('accountEmail').textContent = user.email;
+  document.body.classList.remove('auth-locked');
+  generateDueRecurring();
+  renderAll();
+  showWelcomeIfNeeded();
+}
+function signOut(){
+  localStorage.removeItem(SESSION_KEY);
+  currentUser = null;
+  state = createEmptyState();
+  document.getElementById('welcomeOverlay').classList.remove('show');
+  document.getElementById('authGate').style.display = 'flex';
+  document.getElementById('authForm').reset();
+  setAuthMode('login');
+  document.body.classList.add('auth-locked');
+}
+function bootAuth(){
+  const sessionId = localStorage.getItem(SESSION_KEY);
+  const user = getUsers().find(item=>item.id===sessionId);
+  if(user) startSession(user, false);
+  else document.getElementById('authGate').style.display = 'flex';
+}
 
 /* ---------------- toast (undo) ---------------- */
 let toastTimeout = null;
@@ -46,12 +137,12 @@ function hideToast(){
 
 /* ---------------- welcome modal (first visit) ---------------- */
 function showWelcomeIfNeeded(){
-  if(!localStorage.getItem('fp_seenWelcome')){
+  if(currentUser && !localStorage.getItem(`fp_seenWelcome_${currentUser.id}`)){
     document.getElementById('welcomeOverlay').classList.add('show');
   }
 }
 function dismissWelcome(){
-  localStorage.setItem('fp_seenWelcome', '1');
+  localStorage.setItem(`fp_seenWelcome_${currentUser.id}`, '1');
   document.getElementById('welcomeOverlay').classList.remove('show');
 }
 
@@ -546,6 +637,4 @@ function renderAll(){
   renderGoals();
   renderSettings();
 }
-generateDueRecurring();
-renderAll();
-showWelcomeIfNeeded();
+bootAuth();
