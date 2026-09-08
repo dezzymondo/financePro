@@ -99,7 +99,7 @@
       </div>
 
       <div class="panel" id="txPanel">
-        <h3>New entry</h3>
+        <h3 id="txPanelTitle">New entry</h3>
         <div class="type-toggle" id="typeToggle">
           <button type="button" data-type="expense" class="on">Expense</button>
           <button type="button" data-type="income">Income</button>
@@ -123,7 +123,7 @@
           </div>
         </div>
         <div class="panel-actions">
-          <button class="btn btn-primary" onclick="submitTransaction()">Save entry</button>
+          <button class="btn btn-primary" id="txSaveBtn" onclick="submitTransaction()">Save entry</button>
           <button class="btn" onclick="closeForm()">Cancel</button>
         </div>
       </div>
@@ -153,9 +153,19 @@
         <h1>Analytics</h1>
         <p>Where the money actually goes.</p>
       </div>
+
+      <div class="row-between" style="margin-bottom:2px;">
+        <h3 style="font-size:15px; font-weight:500; margin:0;">Income vs expenses, by month</h3>
+        <div class="chart-legend">
+          <span><i class="dot income"></i>Income</span>
+          <span><i class="dot expense"></i>Expenses</span>
+        </div>
+      </div>
+      <div class="trend-chart-wrap" id="trendChart"></div>
+
       <div class="two-col">
         <div>
-          <h3 style="font-size:15px; font-weight:500; margin-bottom:2px;">Spending by category</h3>
+          <h3 style="font-size:15px; font-weight:500; margin-bottom:2px;">This month, by category</h3>
           <div class="bar-list" id="analyticsBars"></div>
         </div>
         <div>
@@ -265,6 +275,11 @@
     </section>
 
   </main>
+</div>
+
+<div class="toast" id="toast">
+  <span id="toastMsg"></span>
+  <button id="toastUndo">Undo</button>
 </div>
 
 <script src="script.js"></script>

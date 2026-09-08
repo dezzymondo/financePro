@@ -25,6 +25,21 @@ function cur(){ return state.currency; }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
+/* ---------------- toast (undo) ---------------- */
+let toastTimeout = null;
+function showUndoToast(message, undoFn){
+  clearTimeout(toastTimeout);
+  const toast = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = message;
+  toast.classList.add('show');
+  const undoBtn = document.getElementById('toastUndo');
+  undoBtn.onclick = () => { undoFn(); hideToast(); };
+  toastTimeout = setTimeout(hideToast, 6000);
+}
+function hideToast(){
+  document.getElementById('toast').classList.remove('show');
+}
+
 /* ---------------- nav ---------------- */
 document.getElementById('nav').addEventListener('click', e=>{
   const btn = e.target.closest('.nav-item');
@@ -49,8 +64,10 @@ function fillFilterCategories(){
   if([...sel.options].some(o=>o.value===current)) sel.value = current;
 }
 
-/* ---------------- transaction form ---------------- */
+/* ---------------- transaction form (add + edit) ---------------- */
 let currentType = 'expense';
+let editingId = null; // set while editing an existing entry, null when adding new
+
 document.getElementById('typeToggle').addEventListener('click', e=>{
   const btn = e.target.closest('button');
   if(!btn) return;
@@ -58,16 +75,42 @@ document.getElementById('typeToggle').addEventListener('click', e=>{
   document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.toggle('on', b===btn));
   fillCategorySelect(document.getElementById('txCategory'), currentType);
 });
+
 function openForm(){
+  editingId = null;
+  currentType = 'expense';
+  document.getElementById('txPanelTitle').textContent = 'New entry';
+  document.getElementById('txSaveBtn').textContent = 'Save entry';
   document.getElementById('txPanel').classList.add('open');
+  document.getElementById('txAmount').value = '';
+  document.getElementById('txDesc').value = '';
   document.getElementById('txDate').value = todayISO();
+  document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.toggle('on', b.dataset.type==='expense'));
   fillCategorySelect(document.getElementById('txCategory'), currentType);
 }
+
+function editTransaction(id){
+  const t = state.transactions.find(x=>x.id===id);
+  if(!t) return;
+  editingId = id;
+  currentType = t.type;
+  document.getElementById('txPanelTitle').textContent = 'Edit entry';
+  document.getElementById('txSaveBtn').textContent = 'Save changes';
+  document.getElementById('txPanel').classList.add('open');
+  document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.toggle('on', b.dataset.type===t.type));
+  fillCategorySelect(document.getElementById('txCategory'), t.type);
+  document.getElementById('txCategory').value = t.category;
+  document.getElementById('txAmount').value = t.amount;
+  document.getElementById('txDesc').value = t.desc;
+  document.getElementById('txDate').value = t.date;
+  document.getElementById('txPanel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 function closeForm(){
   document.getElementById('txPanel').classList.remove('open');
-  document.getElementById('txAmount').value='';
-  document.getElementById('txDesc').value='';
+  editingId = null;
 }
+
 function submitTransaction(){
   const amount = parseFloat(document.getElementById('txAmount').value);
   const desc = document.getElementById('txDesc').value.trim();
@@ -75,15 +118,29 @@ function submitTransaction(){
   const date = document.getElementById('txDate').value || todayISO();
   if(!amount || amount<=0){ alert('Enter an amount greater than zero.'); return; }
   if(!desc){ alert('Give this entry a short description.'); return; }
-  state.transactions.push({ id:uid(), type:currentType, amount, category, desc, date });
+
+  if(editingId){
+    const t = state.transactions.find(x=>x.id===editingId);
+    if(t){ t.type = currentType; t.amount = amount; t.category = category; t.desc = desc; t.date = date; }
+  } else {
+    state.transactions.push({ id:uid(), type:currentType, amount, category, desc, date });
+  }
   persist();
   closeForm();
   renderAll();
 }
+
 function deleteTransaction(id){
-  state.transactions = state.transactions.filter(t=>t.id!==id);
+  const idx = state.transactions.findIndex(t=>t.id===id);
+  if(idx===-1) return;
+  const [removed] = state.transactions.splice(idx,1);
   persist();
   renderAll();
+  showUndoToast('Entry deleted', () => {
+    state.transactions.splice(idx,0,removed);
+    persist();
+    renderAll();
+  });
 }
 
 /* ---------------- rendering: ledger row ---------------- */
@@ -97,7 +154,10 @@ function ledgerRow(t){
       <div class="l-meta"><span class="cat">${t.category}</span> · ${formatDate(t.date)}</div>
     </div>
     <div class="l-amount mono ${t.type}">${sign}${cur()}${fmt(t.amount)}</div>
-    <button class="l-del btn-danger-text" onclick="deleteTransaction('${t.id}')" aria-label="Delete entry">✕</button>
+    <div class="l-actions">
+      <button class="l-edit" onclick="editTransaction('${t.id}')" aria-label="Edit entry">✎</button>
+      <button class="l-del btn-danger-text" onclick="deleteTransaction('${t.id}')" aria-label="Delete entry">✕</button>
+    </div>
   </div>`;
 }
 function formatDate(iso){
@@ -154,9 +214,52 @@ function renderTransactions(){
 }
 
 /* ---------------- analytics ---------------- */
+function renderTrendChart(){
+  const box = document.getElementById('trendChart');
+  if(!state.transactions.length){
+    box.innerHTML = `<div class="trend-empty">No entries yet — your monthly trend will show up here once you start logging.</div>`;
+    return;
+  }
+
+  const byMonth = {};
+  state.transactions.forEach(t=>{
+    const key = t.date.slice(0,7); // "YYYY-MM"
+    if(!byMonth[key]) byMonth[key] = {income:0, expense:0};
+    byMonth[key][t.type] += Number(t.amount);
+  });
+
+  const months = Object.keys(byMonth).sort().slice(-6);
+  const max = Math.max(1, ...months.map(m => Math.max(byMonth[m].income, byMonth[m].expense)));
+
+  const monthLabel = (key)=>{
+    const [y,m] = key.split('-');
+    const d = new Date(Number(y), Number(m)-1, 1);
+    return d.toLocaleDateString('en-GB', {month:'short'});
+  };
+
+  box.innerHTML = `<div class="trend-chart">` + months.map(key=>{
+    const {income, expense} = byMonth[key];
+    const incH = Math.max(2, (income/max*150));
+    const expH = Math.max(2, (expense/max*150));
+    return `
+    <div class="trend-month">
+      <div class="trend-bars">
+        <div class="trend-bar income" style="height:${incH}px" title="Income: ${cur()}${fmt(income)}"></div>
+        <div class="trend-bar expense" style="height:${expH}px" title="Expenses: ${cur()}${fmt(expense)}"></div>
+      </div>
+      <div class="trend-label">${monthLabel(key)}</div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
 function renderAnalytics(){
-  const expenses = state.transactions.filter(t=>t.type==='expense');
-  const income = sum(state.transactions.filter(t=>t.type==='income'));
+  renderTrendChart();
+
+  // "This month" snapshot — filtered to the current calendar month, not all-time
+  const nowKey = todayISO().slice(0,7);
+  const thisMonth = state.transactions.filter(t=>t.date.slice(0,7)===nowKey);
+  const expenses = thisMonth.filter(t=>t.type==='expense');
+  const income = sum(thisMonth.filter(t=>t.type==='income'));
   const expTotal = sum(expenses);
   document.getElementById('anIncome').textContent = cur()+fmt(income);
   document.getElementById('anExpense').textContent = cur()+fmt(expTotal);
@@ -173,7 +276,7 @@ function renderAnalytics(){
       <div class="bar-top"><span class="cat-name">${name}</span><span class="cat-amt mono">${cur()}${fmt(amt)}</span></div>
       <div class="bar-track"><div class="bar-fill" style="width:${(amt/max*100).toFixed(1)}%"></div></div>
     </div>`).join('') :
-    `<div class="empty"><strong>No spending logged yet.</strong>Once you add expenses, their breakdown shows up here.</div>`;
+    `<div class="empty"><strong>No spending logged this month.</strong>Once you add expenses, their breakdown shows up here.</div>`;
 }
 
 /* ---------------- budgets ---------------- */
@@ -197,8 +300,16 @@ function submitBudget(){
   renderAll();
 }
 function deleteBudget(id){
-  state.budgets = state.budgets.filter(b=>b.id!==id);
-  persist(); renderAll();
+  const idx = state.budgets.findIndex(b=>b.id===id);
+  if(idx===-1) return;
+  const [removed] = state.budgets.splice(idx,1);
+  persist();
+  renderAll();
+  showUndoToast('Budget removed', () => {
+    state.budgets.splice(idx,0,removed);
+    persist();
+    renderAll();
+  });
 }
 function renderBudgets(){
   const box = document.getElementById('budgetList');
@@ -207,7 +318,8 @@ function renderBudgets(){
     return;
   }
   box.innerHTML = state.budgets.map(b=>{
-    const spent = sum(state.transactions.filter(t=>t.type==='expense' && t.category===b.category));
+    const nowKey = todayISO().slice(0,7);
+    const spent = sum(state.transactions.filter(t=>t.type==='expense' && t.category===b.category && t.date.slice(0,7)===nowKey));
     const pct = Math.min(100, (spent/b.amount*100));
     const over = spent > b.amount;
     return `
@@ -240,7 +352,18 @@ function submitGoal(){
   closeGoalForm();
   renderAll();
 }
-function deleteGoal(id){ state.goals = state.goals.filter(g=>g.id!==id); persist(); renderAll(); }
+function deleteGoal(id){
+  const idx = state.goals.findIndex(g=>g.id===id);
+  if(idx===-1) return;
+  const [removed] = state.goals.splice(idx,1);
+  persist();
+  renderAll();
+  showUndoToast('Goal removed', () => {
+    state.goals.splice(idx,0,removed);
+    persist();
+    renderAll();
+  });
+}
 function addToGoal(id){
   const g = state.goals.find(g=>g.id===id);
   const amt = parseFloat(prompt(`Add how much to "${g.name}"?`, '0'));
