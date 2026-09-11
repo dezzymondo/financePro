@@ -8,6 +8,7 @@ const DATA_FIELDS = ['transactions','budgets','goals','templates','recurring','a
 let currentUser = null;
 let authMode = 'login';
 let state = createEmptyState();
+let persistQueue = Promise.resolve();
 
 function createEmptyState(){
   return {
@@ -62,7 +63,7 @@ function loadLocalState(){
 function persist(){
   if(!currentUser) return;
   const data = {...state, updatedAt: firebase.firestore.FieldValue.serverTimestamp()};
-  userDoc().set(data, {merge:true}).catch(error=>setAuthError(`Could not save your data: ${error.message}`));
+  persistQueue = persistQueue.then(()=>userDoc().set(data, {merge:true})).catch(error=>setAuthError(`Could not save your data: ${error.message}`));
 }
 
 function fmt(n){

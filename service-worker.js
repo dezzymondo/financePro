@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v10-production-hardening';
+const CACHE_NAME = 'financepro-v11-persistence';
 const ASSETS = [
   './index.html',
   './style.css',
