@@ -43,6 +43,7 @@
       <div class="auth-error" id="authError" role="alert"></div>
       <button class="btn btn-primary auth-submit" id="authSubmit" type="submit">Log in</button>
       <button class="btn auth-google" type="button" onclick="signInWithGoogle()">Continue with Google</button>
+      <button class="text-button" id="forgotPasswordBtn" type="button" onclick="sendPasswordReset()">Forgot password?</button>
     </form>
     <p class="auth-note">Your account and ledger are securely synced with Firebase across your devices.</p>
   </div>
@@ -92,7 +93,7 @@
         Settings
       </button>
     </nav>
-    <div class="rail-foot">Stored locally on this device. No account, no server.</div>
+    <div class="rail-foot">Private ledger, synced securely across your devices.</div>
   </aside>
 
   <main>
@@ -342,7 +343,7 @@
         <p>Small preferences, kept simple.</p>
         <button class="info-toggle" onclick="toggleInfo('info-settings')">ⓘ How this works</button>
         <div class="info-panel" id="info-settings">
-          Your account and ledger live only in this browser on this device — there's no server, so the account cannot be used to sync across devices. Clearing browser data would erase it permanently. Export a CSV backup now and then to keep a copy you control.
+          Your account and ledger are synced to your private Firebase account, so you can use FinancePro across devices. Export a full backup occasionally so you also keep a copy you control.
         </div>
       </div>
 
@@ -360,8 +361,13 @@
 
       <div class="settings-block">
         <h3>Backup your data</h3>
-        <p>Download every transaction as a CSV file — keep a copy somewhere safe, or open it in Excel/Sheets.</p>
-        <button class="btn" onclick="exportCSV()">Export as CSV</button>
+        <p>Export a portable copy of your complete ledger, including budgets, goals, templates, and recurring entries.</p>
+        <div class="settings-actions">
+          <button class="btn" onclick="exportBackup()">Download full backup</button>
+          <button class="btn" onclick="document.getElementById('backupFile').click()">Restore backup</button>
+          <input type="file" id="backupFile" accept="application/json" hidden onchange="importBackup(event)">
+        </div>
+        <button class="btn btn-ghost" onclick="exportCSV()">Export transactions as CSV</button>
       </div>
 
       <div class="settings-block">

@@ -50,6 +50,7 @@ function setAuthMode(mode){
   document.getElementById('authPassword').autocomplete = signup ? 'new-password' : 'current-password';
   document.getElementById('loginTab').classList.toggle('active', !signup);
   document.getElementById('signupTab').classList.toggle('active', signup);
+  document.getElementById('forgotPasswordBtn').style.display = signup ? 'none' : 'block';
   setAuthError('');
 }
 async function handleAuthSubmit(event){
@@ -71,6 +72,8 @@ async function handleAuthSubmit(event){
 function firebaseAuthMessage(error){
   const messages = {
     'auth/invalid-credential':'Email or password is incorrect.',
+    'auth/invalid-email':'Enter a valid email address.',
+    'auth/user-not-found':'No account was found for that email.',
     'auth/email-already-in-use':'An account with that email already exists.',
     'auth/weak-password':'Use a password with at least 6 characters.',
     'auth/popup-closed-by-user':'Google sign-in was cancelled.',
@@ -85,6 +88,14 @@ async function signInWithGoogle(){
   setAuthError('');
   try { await financeAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
   catch(error){ setAuthError(firebaseAuthMessage(error)); }
+}
+async function sendPasswordReset(){
+  const email = normalizeEmail(document.getElementById('authEmail').value);
+  if(!email){ setAuthError('Enter your email address first.'); return; }
+  try {
+    await financeAuth.sendPasswordResetEmail(email);
+    setAuthError('Password reset email sent. Check your inbox.');
+  } catch(error){ setAuthError(firebaseAuthMessage(error)); }
 }
 async function startSession(user){
   currentUser = user;
@@ -602,7 +613,62 @@ function resetAll(){
   persist(); renderAll();
 }
 
-/* ---------------- CSV export ---------------- */
+/* ---------------- backup and CSV export ---------------- */
+function downloadFile(content, filename, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function exportBackup(){
+  const backup = {
+    app: 'FinancePro',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    currency: state.currency,
+    transactions: state.transactions,
+    budgets: state.budgets,
+    goals: state.goals,
+    templates: state.templates,
+    recurring: state.recurring
+  };
+  downloadFile(JSON.stringify(backup, null, 2), `financepro-backup-${todayISO()}.json`, 'application/json');
+}
+function importBackup(event){
+  const file = event.target.files[0];
+  event.target.value = '';
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const backup = JSON.parse(reader.result);
+      const valid = backup && backup.app === 'FinancePro' &&
+        DATA_FIELDS.every(field=>Array.isArray(backup[field]));
+      if(!valid) throw new Error('This is not a valid FinancePro backup.');
+      if(!confirm('Restore this backup? Your current ledger will be replaced.')) return;
+      state = {
+        ...createEmptyState(),
+        currency: CUR_OPTIONS.includes(backup.currency) ? backup.currency : '₦',
+        transactions: backup.transactions,
+        budgets: backup.budgets,
+        goals: backup.goals,
+        templates: backup.templates,
+        recurring: backup.recurring
+      };
+      persist();
+      renderAll();
+      alert('Backup restored successfully.');
+    } catch(error){
+      alert(error.message || 'Could not read this backup file.');
+    }
+  };
+  reader.readAsText(file);
+}
 function exportCSV(){
   if(!state.transactions.length){ alert('No transactions to export yet.'); return; }
   const rows = [['Date','Type','Category','Description','Amount']];
@@ -610,15 +676,7 @@ function exportCSV(){
     rows.push([t.date, t.type, t.category, t.desc.replace(/"/g,'""'), t.amount]);
   });
   const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `financepro-export-${todayISO()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadFile(csv, `financepro-export-${todayISO()}.csv`, 'text/csv;charset=utf-8;');
 }
 
 /* ---------------- render all ---------------- */
