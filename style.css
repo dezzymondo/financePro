@@ -83,7 +83,7 @@
 
   main{flex:1; padding:40px 48px 80px; max-width:980px;}
   .section{display:none;}
-  .section.active{display:block;}
+  .section.active{display:block; animation:sectionIn .36s ease both;}
 
   .section-head{margin-bottom:32px;}
   .section-head h1{font-size:28px; font-weight:500; margin:0 0 6px;}
@@ -97,6 +97,7 @@
   }
   .hero-label{color:var(--ink-faint); font-size:13px; margin-bottom:6px;}
   .hero-amount{font-size:46px; font-weight:500; letter-spacing:-0.01em;}
+  .hero-amount{animation:balanceIn .55s cubic-bezier(.2,.8,.2,1) both;}
   .hero-amount .cur{color:var(--gold); margin-right:2px; font-size:0.6em; vertical-align:2px;}
 
   /* ---------- ledger strip (stats) ---------- */
@@ -110,7 +111,10 @@
     padding:16px 24px 18px 0;
     margin-right:24px;
     border-bottom:2px solid var(--tick, var(--gold));
+    animation:riseIn .45s ease both;
   }
+  .strip-item:nth-child(2){animation-delay:.07s;}
+  .strip-item:nth-child(3){animation-delay:.14s;}
   .strip-item:last-child{margin-right:0;}
   .strip-item .k{color:var(--ink-dim); font-size:13px; margin-bottom:6px;}
   .strip-item .v{font-size:22px; font-weight:500;}
@@ -195,7 +199,13 @@
     display:flex; align-items:center; gap:16px;
     padding:14px 0;
     border-bottom:1px solid var(--rule);
+    animation:rowIn .35s ease both;
   }
+  .ledger-row:nth-child(2){animation-delay:.04s;}
+  .ledger-row:nth-child(3){animation-delay:.08s;}
+  .ledger-row:nth-child(4){animation-delay:.12s;}
+  .ledger-row:nth-child(5){animation-delay:.16s;}
+  .ledger-row:nth-child(6){animation-delay:.20s;}
   .ledger-row:hover{background:rgba(255,255,255,0.015);}
   .tick{width:3px; align-self:stretch; border-radius:2px; flex-shrink:0;}
   .tick.income{background:var(--income);}
@@ -267,6 +277,7 @@
     z-index:100; padding:20px;
   }
   .modal-overlay.show{ display:flex; }
+  .modal-overlay.show .modal-card{animation:modalIn .3s cubic-bezier(.2,.8,.2,1) both;}
   .modal-card{
     background:var(--surface); border:1px solid var(--rule-strong); border-radius:8px;
     padding:30px 28px; max-width:440px; width:100%;
@@ -369,8 +380,9 @@
   .trend-month{ display:flex; flex-direction:column; align-items:center; flex-shrink:0; min-width:46px; }
   .trend-bars{ display:flex; align-items:flex-end; gap:4px; height:150px; }
   .trend-bar{ width:14px; border-radius:2px 2px 0 0; background:var(--rule-strong); position:relative; }
+  .trend-bar{animation:barIn .65s cubic-bezier(.2,.8,.2,1) both; transform-origin:bottom;}
   .trend-bar.income{ background:var(--income); }
-  .trend-bar.expense{ background:var(--expense); }
+  .trend-bar.expense{ background:var(--expense); animation-delay:.08s; }
   .trend-label{ margin-top:8px; font-size:11.5px; color:var(--ink-faint); }
   .trend-empty{ color:var(--ink-faint); font-size:14px; padding:24px 0; }
 
@@ -406,6 +418,7 @@
   .item-nums .warn{color:var(--expense);}
   .progress-track{height:7px; background:var(--rule); border-radius:4px; overflow:hidden; margin-top:9px;}
   .progress-fill{height:100%; border-radius:4px; background:var(--gold);}
+  .progress-fill{transition:width .7s cubic-bezier(.2,.8,.2,1);}
   .progress-fill.over{background:var(--expense);}
   .item-actions{margin-top:10px; display:flex; gap:14px;}
   .item-actions button{background:none; border:none; padding:0; font-size:12.5px; color:var(--ink-dim); text-decoration:underline;}
@@ -434,6 +447,13 @@
   }
   .cur-opt.active{border-color:var(--gold); color:var(--gold);}
 
+  @keyframes sectionIn{from{opacity:0; transform:translateY(8px);}to{opacity:1; transform:translateY(0);}}
+  @keyframes balanceIn{from{opacity:0; transform:translateY(12px) scale(.98);}to{opacity:1; transform:translateY(0) scale(1);}}
+  @keyframes riseIn{from{opacity:0; transform:translateY(8px);}to{opacity:1; transform:translateY(0);}}
+  @keyframes rowIn{from{opacity:0; transform:translateX(-8px);}to{opacity:1; transform:translateX(0);}}
+  @keyframes modalIn{from{opacity:0; transform:translateY(12px) scale(.98);}to{opacity:1; transform:translateY(0) scale(1);}}
+  @keyframes barIn{from{transform:scaleY(0);}to{transform:scaleY(1);}}
+
   @media (max-width:760px){
     .shell{flex-direction:column;}
     .rail{width:100%; flex-direction:row; align-items:center; padding:14px 16px; overflow-x:auto;}
@@ -454,4 +474,6 @@
   }
 
   :focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
-  @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{transition:none !important; animation:none !important; scroll-behavior:auto !important;}
+  }
