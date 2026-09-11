@@ -981,6 +981,23 @@ function exportCSV(){
 }
 
 /* ---------------- render all ---------------- */
+let scrollObserver = null;
+function setupScrollAnimations(){
+  if(!('IntersectionObserver' in window)) return;
+  if(scrollObserver) scrollObserver.disconnect();
+  scrollObserver = new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(!entry.isIntersecting) return;
+      entry.target.classList.add('revealed');
+      scrollObserver.unobserve(entry.target);
+    });
+  }, {threshold:0.12, rootMargin:'0px 0px -30px'});
+  const targets = '.section.active .section-head, .section.active .hero, .section.active .strip, .section.active .health-head, .section.active .health-grid, .section.active .row-between, .section.active .toolbar, .section.active .panel.open, .section.active .ledger, .section.active .two-col, .section.active .trend-chart-wrap, .section.active .report-head, .section.active .year-report, .section.active .item-list, .section.active .settings-block';
+  document.querySelectorAll(targets).forEach(element=>{
+    element.classList.add('scroll-reveal');
+    if(!element.classList.contains('revealed')) scrollObserver.observe(element);
+  });
+}
 function renderAll(){
   renderDashboard();
   renderTransactions();
@@ -990,5 +1007,6 @@ function renderAll(){
   renderBudgets();
   renderGoals();
   renderSettings();
+  setupScrollAnimations();
 }
 bootAuth();

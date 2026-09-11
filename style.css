@@ -22,6 +22,8 @@
     font-size:15px;
     line-height:1.5;
     min-height:100vh;
+    background-image:radial-gradient(circle at 88% 8%, rgba(201,163,93,.07), transparent 25rem), radial-gradient(circle at 5% 92%, rgba(127,174,143,.045), transparent 24rem);
+    background-attachment:fixed;
   }
   h1,h2,h3,.serif{font-family:'Fraunces',serif;}
   .mono{font-family:'IBM Plex Mono',monospace; font-variant-numeric: tabular-nums;}
@@ -44,13 +46,15 @@
     margin-bottom:8px;
   }
   .brand-mark{
-    display:flex; align-items:baseline; gap:2px;
+    display:flex; align-items:baseline; gap:2px; position:relative; width:fit-content; overflow:hidden;
   }
+  .brand-mark::after{content:""; position:absolute; top:0; bottom:0; left:-55%; width:22%; background:linear-gradient(90deg, transparent, rgba(255,255,255,.32), transparent); transform:skewX(-16deg); animation:logoSweep 5.5s ease-in-out infinite; pointer-events:none;}
   .brand-mark span:first-child{
     font-family:'Fraunces',serif; font-weight:600; font-size:21px; letter-spacing:-0.01em;
   }
   .brand-mark span:last-child{
     font-family:'Fraunces',serif; font-weight:400; font-style:italic; font-size:21px; color:var(--gold);
+    animation:logoFloat 3.2s ease-in-out infinite;
   }
   .brand-sub{color:var(--ink-faint); font-size:12px; margin-top:4px;}
 
@@ -74,6 +78,7 @@
     background:rgba(201,163,93,0.06);
   }
   .nav-item.active svg{opacity:1;}
+  .nav-item.active svg{animation:navPulse 2.4s ease-in-out infinite;}
 
   .rail-foot{
     margin-top:auto; padding:16px 24px 0;
@@ -84,6 +89,8 @@
   main{flex:1; padding:40px 48px 80px; max-width:980px;}
   .section{display:none;}
   .section.active{display:block; animation:sectionIn .36s ease both;}
+  .scroll-reveal{opacity:0; transform:translateY(18px);}
+  .scroll-reveal.revealed{animation:scrollReveal .62s cubic-bezier(.2,.8,.2,1) both;}
 
   .section-head{margin-bottom:32px;}
   .section-head h1{font-size:28px; font-weight:500; margin:0 0 6px;}
@@ -94,7 +101,10 @@
     padding:28px 0 26px;
     border-bottom:1px solid var(--rule-strong);
     margin-bottom:24px;
+    position:relative;
+    overflow:hidden;
   }
+  .hero::after{content:""; position:absolute; left:0; bottom:-1px; width:34%; height:2px; background:var(--gold); box-shadow:0 0 18px rgba(201,163,93,.55); transform-origin:left; animation:lineReveal .8s ease both;}
   .hero-label{color:var(--ink-faint); font-size:13px; margin-bottom:6px;}
   .hero-amount{font-size:46px; font-weight:500; letter-spacing:-0.01em;}
   .hero-amount{animation:balanceIn .55s cubic-bezier(.2,.8,.2,1) both;}
@@ -138,8 +148,12 @@
     color:var(--gold-ink);
     border:1px solid var(--gold);
     font-weight:600;
+    position:relative;
+    overflow:hidden;
   }
+  .btn-primary::after{content:""; position:absolute; inset:0 auto 0 -42%; width:28%; background:rgba(255,255,255,.28); transform:skewX(-18deg); animation:buttonSheen 4.8s ease-in-out infinite; pointer-events:none;}
   .btn-primary:hover{background:#d9b877; color:var(--gold-ink); border-color:#d9b877;}
+  .btn:active{transform:translateY(1px) scale(.985);}
   .btn-ghost{border-color:transparent; color:var(--ink-dim); padding:6px 10px;}
   .btn-ghost:hover{color:var(--expense); border-color:transparent;}
   .btn-danger-text{color:var(--ink-faint); background:none; border:none; font-size:12px; text-decoration:underline; padding:4px;}
@@ -170,6 +184,7 @@
     display:none;
   }
   .panel.open{display:block;}
+  .panel.open{animation:panelIn .28s ease both;}
   .panel h3{margin:0 0 16px; font-size:16px; font-weight:500;}
   .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px 16px;}
   .form-grid .full{grid-column:1 / -1;}
@@ -207,6 +222,7 @@
   .ledger-row:nth-child(5){animation-delay:.16s;}
   .ledger-row:nth-child(6){animation-delay:.20s;}
   .ledger-row:hover{background:rgba(255,255,255,0.015);}
+  .ledger-row:hover{transform:translateX(3px); transition:transform .18s ease, background .18s ease;}
   .tick{width:3px; align-self:stretch; border-radius:2px; flex-shrink:0;}
   .tick.income{background:var(--income);}
   .tick.expense{background:var(--expense);}
@@ -319,6 +335,8 @@
     padding:7px 10px 7px 14px; font-size:13px; color:var(--ink);
   }
   .quickadd-chip:hover{ border-color:var(--gold); }
+  .quickadd-chip{transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;}
+  .quickadd-chip:hover{transform:translateY(-2px); box-shadow:0 7px 18px rgba(0,0,0,.18);}
   .quickadd-chip .qa-remove{
     background:none; border:none; color:var(--ink-faint); font-size:12px; padding:2px 4px; line-height:1;
   }
@@ -395,6 +413,8 @@
   .health-card.negative{border-top-color:var(--expense);}
   .health-card span{display:block; color:var(--ink-dim); font-size:12px; margin-bottom:7px;}
   .health-card strong{font-size:17px; font-weight:500;}
+  .health-card{transition:transform .2s ease, border-color .2s ease, box-shadow .2s ease;}
+  .health-card:hover{transform:translateY(-3px); border-color:var(--rule-strong); box-shadow:0 10px 24px rgba(0,0,0,.18);}
   .health-card.negative strong{color:var(--expense);}
   .report-head select{background:var(--surface); border:1px solid var(--rule-strong); color:var(--ink); padding:7px 10px; border-radius:var(--radius);}
   .year-report{border-top:1px solid var(--rule-strong); padding:16px 0 30px;}
@@ -446,6 +466,9 @@
     background:transparent; color:var(--ink-dim); font-size:14px;
   }
   .cur-opt.active{border-color:var(--gold); color:var(--gold);}
+  .cur-opt{transition:transform .18s ease, border-color .18s ease, color .18s ease;}
+  .cur-opt:hover{transform:translateY(-2px);}
+  input:focus,select:focus{box-shadow:0 0 0 3px rgba(201,163,93,.09);}
 
   @keyframes sectionIn{from{opacity:0; transform:translateY(8px);}to{opacity:1; transform:translateY(0);}}
   @keyframes balanceIn{from{opacity:0; transform:translateY(12px) scale(.98);}to{opacity:1; transform:translateY(0) scale(1);}}
@@ -453,6 +476,13 @@
   @keyframes rowIn{from{opacity:0; transform:translateX(-8px);}to{opacity:1; transform:translateX(0);}}
   @keyframes modalIn{from{opacity:0; transform:translateY(12px) scale(.98);}to{opacity:1; transform:translateY(0) scale(1);}}
   @keyframes barIn{from{transform:scaleY(0);}to{transform:scaleY(1);}}
+  @keyframes navPulse{0%,100%{transform:translateY(0); filter:drop-shadow(0 0 0 transparent);}50%{transform:translateY(-2px); filter:drop-shadow(0 0 5px rgba(201,163,93,.45));}}
+  @keyframes lineReveal{from{opacity:0; transform:scaleX(0);}to{opacity:1; transform:scaleX(1);}}
+  @keyframes buttonSheen{0%,68%{transform:translateX(-180%) skewX(-18deg); opacity:0;}78%{opacity:1;}92%,100%{transform:translateX(560%) skewX(-18deg); opacity:0;}}
+  @keyframes panelIn{from{opacity:0; transform:translateY(-6px);}to{opacity:1; transform:translateY(0);}}
+  @keyframes logoSweep{0%,72%{transform:translateX(-180%) skewX(-16deg); opacity:0;}80%{opacity:1;}94%,100%{transform:translateX(650%) skewX(-16deg); opacity:0;}}
+  @keyframes logoFloat{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-1px) rotate(-1deg);}}
+  @keyframes scrollReveal{from{opacity:0; transform:translateY(18px);}to{opacity:1; transform:translateY(0);}}
 
   @media (max-width:760px){
     .shell{flex-direction:column;}
@@ -476,4 +506,5 @@
   :focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{transition:none !important; animation:none !important; scroll-behavior:auto !important;}
+    .scroll-reveal{opacity:1; transform:none;}
   }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v12-motion';
+const CACHE_NAME = 'financepro-v13-scroll-motion';
 const ASSETS = [
   './index.html',
   './style.css',
