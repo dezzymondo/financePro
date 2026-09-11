@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v5-firebase';
+const CACHE_NAME = 'financepro-v6-features';
 const ASSETS = [
   './index.html',
   './style.css',
