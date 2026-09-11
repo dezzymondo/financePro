@@ -1,0 +1,9 @@
+node_modules/
+.firebase/
+.idea/
+*.iml
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinancePro — Your Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=13">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#101c19">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FinancePro">
+</head>
+<body>
+
+<div class="auth-gate" id="authGate">
+  <div class="auth-card">
+    <div class="brand-mark"><span>Finance</span><span>Pro</span></div>
+    <div class="auth-kicker">Your private ledger</div>
+    <h1 id="authTitle">Welcome back.</h1>
+    <p id="authIntro">Log in to pick up where you left off.</p>
+    <div class="auth-tabs" role="tablist" aria-label="Account access">
+      <button type="button" class="auth-tab active" id="loginTab" onclick="setAuthMode('login')">Log in</button>
+      <button type="button" class="auth-tab" id="signupTab" onclick="setAuthMode('signup')">Sign up</button>
+    </div>
+    <form id="authForm" onsubmit="handleAuthSubmit(event)">
+      <div class="field">
+        <label for="authEmail">Email</label>
+        <input type="email" id="authEmail" autocomplete="email" placeholder="you@example.com" required>
+      </div>
+      <div class="field">
+        <label for="authPassword">Password</label>
+        <input type="password" id="authPassword" autocomplete="current-password" minlength="6" placeholder="At least 6 characters" required>
+      </div>
+      <div class="field" id="authConfirmField" style="display:none;">
+        <label for="authConfirm">Confirm password</label>
+        <input type="password" id="authConfirm" autocomplete="new-password" minlength="6" placeholder="Type it again">
+      </div>
+      <div class="auth-error" id="authError" role="alert"></div>
+      <button class="btn btn-primary auth-submit" id="authSubmit" type="submit">Log in</button>
+      <button class="btn auth-google" type="button" onclick="signInWithGoogle()">Continue with Google</button>
+      <button class="text-button" id="forgotPasswordBtn" type="button" onclick="sendPasswordReset()">Forgot password?</button>
+    </form>
+    <p class="auth-note">Your account and ledger are securely synced with Firebase across your devices.</p>
+  </div>
+</div>
+
+<div class="pin-overlay" id="pinOverlay">
+  <div class="auth-card pin-card">
+    <div class="brand-mark"><span>Finance</span><span>Pro</span></div>
+    <div class="auth-kicker">Private view</div>
+    <h1>Enter your PIN.</h1>
+    <p>Unlock this browser to view your ledger.</p>
+    <input class="pin-input" id="unlockPin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="4–6 digits">
+    <div class="auth-error" id="pinError" role="alert"></div>
+    <button class="btn btn-primary auth-submit" onclick="unlockApp()">Unlock</button>
+    <button class="btn auth-google" id="biometricUnlockBtn" type="button" onclick="unlockWithBiometric()">Use device biometrics</button>
+    <button class="text-button" onclick="signOut()">Log out instead</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="securitySetupOverlay">
+  <div class="modal-card security-card">
+    <div class="brand-mark" style="margin-bottom:6px;"><span>Finance</span><span>Pro</span></div>
+    <div class="auth-kicker">Optional security</div>
+    <h2>Protect your ledger?</h2>
+    <p>Choose how you want to secure this browser. You can set a PIN, use device biometrics when supported, or skip this for now.</p>
+    <div class="field security-field">
+      <label for="setupPin">Create a 4–6 digit PIN</label>
+      <input type="password" id="setupPin" inputmode="numeric" maxlength="6" placeholder="PIN">
+    </div>
+    <div class="field security-field">
+      <label for="setupPinConfirm">Confirm PIN</label>
+      <input type="password" id="setupPinConfirm" inputmode="numeric" maxlength="6" placeholder="Repeat PIN">
+    </div>
+    <div class="auth-error" id="securitySetupError" role="alert"></div>
+    <button class="btn btn-primary auth-submit" onclick="setSecurityPin()">Set PIN</button>
+    <button class="btn auth-google" type="button" onclick="setupBiometric()">Use device biometrics</button>
+    <button class="text-button" type="button" onclick="skipSecuritySetup()">Skip for now</button>
+  </div>
+</div>
+
+<!-- WELCOME MODAL (first visit only) -->
+<div class="modal-overlay" id="welcomeOverlay">
+  <div class="modal-card">
+    <div class="brand-mark" style="margin-bottom:6px;"><span>Finance</span><span>Pro</span></div>
+    <h2>Welcome to your ledger.</h2>
+    <p>FinancePro doesn't connect to your bank — it's a place you log money by hand, the moment it moves. Get paid, spend on food, send a transfer: add it here as an entry.</p>
+    <p>Over time that builds a real picture: your balance, where money actually goes each month, whether you're within budget, and how close you are to what you're saving for.</p>
+    <p style="color:var(--ink-faint); font-size:12.5px;">Your ledger syncs privately with your account. You can also export a backup any time from Settings.</p>
+    <button class="btn btn-primary" style="margin-top:8px;" onclick="dismissWelcome()">Get started</button>
+  </div>
+</div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-mark"><span>Finance</span><span>Pro</span></div>
+      <div class="brand-sub">your ledger, kept honestly</div>
+    </div>
+    <nav id="nav">
+      <button class="nav-item active" data-section="dashboard">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 9L6 5L9 8L14 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13.5H14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-section="transactions">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6H11.5M4.5 8.5H11.5M4.5 11H8.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Transactions
+      </button>
+      <button class="nav-item" data-section="analytics">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13V7.5M8 13V3M13 13V9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Analytics
+      </button>
+      <button class="nav-item" data-section="budgets">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M8 5V8L10 9.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Budgets
+      </button>
+      <button class="nav-item" data-section="goals">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M8 2C6 2 5 3.2 3.5 3.2C3.5 3.2 3.5 6 3.5 6C5 6 6 7.2 8 7.2" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+        Savings Goals
+      </button>
+      <button class="nav-item" data-section="settings">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M8 2.5V4M8 12V13.5M13.5 8H12M4 8H2.5M11.6 4.4L10.6 5.4M5.4 10.6L4.4 11.6M11.6 11.6L10.6 10.6M5.4 5.4L4.4 4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Settings
+      </button>
+    </nav>
+    <div class="rail-foot">Private ledger, synced securely across your devices.</div>
+  </aside>
+
+  <main>
+
+    <!-- DASHBOARD -->
+    <section class="section active" id="dashboard">
+      <div class="section-head">
+        <h1>Dashboard</h1>
+        <p>Where things stand today.</p>
+        <button class="info-toggle" onclick="toggleInfo('info-dashboard')">ⓘ How this works</button>
+        <div class="info-panel" id="info-dashboard">
+          This is your balance at a glance — every income entry minus every expense entry you've logged, all time. It updates the moment you add, edit, or delete a transaction. "Recent activity" below shows your last few entries; tap "+ New entry" any time money moves.
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="hero-label">Current balance</div>
+        <div class="hero-amount"><span class="cur mono" id="dashCur">₦</span><span class="mono" id="dashBalance">0.00</span></div>
+      </div>
+
+      <div class="strip">
+        <div class="strip-item income">
+          <div class="k">Total income</div>
+          <div class="v mono" id="dashIncome">0.00</div>
+        </div>
+        <div class="strip-item expense">
+          <div class="k">Total expenses</div>
+          <div class="v mono" id="dashExpense">0.00</div>
+        </div>
+        <div class="strip-item count">
+          <div class="k">Entries logged</div>
+          <div class="v mono" id="dashCount">0</div>
+        </div>
+      </div>
+
+      <div class="health-head">
+        <div>
+          <h3>Monthly financial health</h3>
+          <p id="healthPeriod">This month</p>
+        </div>
+        <button class="btn btn-ghost" onclick="goTo('analytics')">View reports</button>
+      </div>
+      <div class="health-grid" id="healthGrid"></div>
+
+      <div class="row-between">
+        <h3 style="margin:0; font-size:16px; font-weight:500;">Recent activity</h3>
+        <button class="btn btn-primary" onclick="goTo('transactions'); openForm();">+ New entry</button>
+      </div>
+      <div class="ledger" id="dashRecent"></div>
+    </section>
+
+    <!-- TRANSACTIONS -->
+    <section class="section" id="transactions">
+      <div class="section-head row-between">
+        <div>
+          <h1>Transactions</h1>
+          <p>Every entry in the book, searchable and sortable.</p>
+          <button class="info-toggle" onclick="toggleInfo('info-transactions')">ⓘ How this works</button>
+          <div class="info-panel" id="info-transactions">
+            Log every entry the moment money moves — income or expense, with an amount, category, and date. Use Quick Add below for things you log often, so you don't retype them each time. Check "Repeat monthly" while adding an entry to have it log itself automatically every month (rent, salary, subscriptions). Tap the pencil on any entry to edit it, or ✕ to delete it — you'll get a few seconds to undo.
+          </div>
+        </div>
+        <button class="btn btn-primary" id="toggleFormBtn" onclick="openForm()">+ New entry</button>
+      </div>
+
+      <!-- QUICK ADD TEMPLATES -->
+      <div class="quickadd-wrap" id="quickAddWrap" style="display:none;">
+        <div class="quickadd-label">Quick add</div>
+        <div class="quickadd-chips" id="quickAddChips"></div>
+      </div>
+
+      <div class="panel" id="txPanel">
+        <h3 id="txPanelTitle">New entry</h3>
+        <div class="type-toggle" id="typeToggle">
+          <button type="button" data-type="expense" class="on">Expense</button>
+          <button type="button" data-type="income">Income</button>
+        </div>
+        <div class="form-grid" style="margin-top:16px;">
+          <div class="field">
+            <label for="txAmount">Amount</label>
+            <input type="number" id="txAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label for="txCategory">Category</label>
+            <select id="txCategory"></select>
+          </div>
+          <div class="field">
+            <label for="txAccount">Account</label>
+            <select id="txAccount"></select>
+          </div>
+          <div class="field full">
+            <label for="txDesc">Description</label>
+            <input type="text" id="txDesc" placeholder="e.g. Market run, rent, freelance payment">
+          </div>
+          <div class="field full">
+            <label for="txNotes">Notes or receipt reference <span class="optional">(optional)</span></label>
+            <input type="text" id="txNotes" placeholder="e.g. receipt number, client, or extra context">
+          </div>
+          <div class="field full">
+            <label for="txReceipt">Receipt link <span class="optional">(optional)</span></label>
+            <input type="url" id="txReceipt" placeholder="https://…">
+          </div>
+          <div class="field">
+            <label for="txDate">Date</label>
+            <input type="date" id="txDate">
+          </div>
+        </div>
+        <div class="check-row" id="txExtrasRow">
+          <label class="check-item"><input type="checkbox" id="txSaveTemplate"> Save as quick-add template</label>
+          <label class="check-item"><input type="checkbox" id="txRecurring"> Repeat monthly</label>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" id="txSaveBtn" onclick="submitTransaction()">Save entry</button>
+          <button class="btn" onclick="closeForm()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- RECURRING RULES -->
+      <div class="recurring-wrap" id="recurringWrap" style="display:none;">
+        <button class="info-toggle" onclick="toggleInfo('info-recurring')">ⓘ Recurring entries — tap to manage</button>
+        <div class="info-panel" id="info-recurring">
+          <div id="recurringList"></div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-wrap"><input type="text" id="searchInput" placeholder="Search transactions…" oninput="renderTransactions()"></div>
+        <select id="filterAccount" onchange="renderTransactions()"><option value="all">All accounts</option></select>
+        <select id="filterCategory" onchange="renderTransactions()"><option value="all">All categories</option></select>
+        <select id="filterType" onchange="renderTransactions()">
+          <option value="all">All types</option>
+          <option value="income">Income only</option>
+          <option value="expense">Expenses only</option>
+        </select>
+        <select id="sortOrder" onchange="renderTransactions()">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="highest">Highest amount</option>
+          <option value="lowest">Lowest amount</option>
+        </select>
+      </div>
+
+      <div class="ledger" id="txList"></div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section class="section" id="analytics">
+      <div class="section-head">
+        <h1>Analytics</h1>
+        <p>Where the money actually goes.</p>
+        <button class="info-toggle" onclick="toggleInfo('info-analytics')">ⓘ How this works</button>
+        <div class="info-panel" id="info-analytics">
+          The chart compares income and expenses month over month, so you can see trends across time. Below it, "This month, by category" and the summary numbers reflect only the current calendar month — a fresh snapshot each month, not a running total.
+        </div>
+      </div>
+
+      <div class="row-between" style="margin-bottom:2px;">
+        <h3 style="font-size:15px; font-weight:500; margin:0;">Income vs expenses, by month</h3>
+        <div class="chart-legend">
+          <span><i class="dot income"></i>Income</span>
+          <span><i class="dot expense"></i>Expenses</span>
+        </div>
+      </div>
+      <div class="trend-chart-wrap" id="trendChart"></div>
+
+      <div class="report-head">
+        <h3>Yearly report</h3>
+        <select id="reportYear" onchange="renderYearReport()"></select>
+      </div>
+      <div class="year-report" id="yearReport"></div>
+
+      <div class="two-col">
+        <div>
+          <h3 style="font-size:15px; font-weight:500; margin-bottom:2px;">This month, by category</h3>
+          <div class="bar-list" id="analyticsBars"></div>
+        </div>
+        <div>
+          <h3 style="font-size:15px; font-weight:500; margin-bottom:2px;">This month, in short</h3>
+          <div class="strip" style="flex-direction:column; border-bottom:none;">
+            <div class="strip-item income" style="margin-right:0;">
+              <div class="k">Income</div>
+              <div class="v mono" id="anIncome">0.00</div>
+            </div>
+            <div class="strip-item expense" style="margin-right:0;">
+              <div class="k">Expenses</div>
+              <div class="v mono" id="anExpense">0.00</div>
+            </div>
+            <div class="strip-item" style="margin-right:0;">
+              <div class="k">Net</div>
+              <div class="v mono" id="anNet">0.00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BUDGETS -->
+    <section class="section" id="budgets">
+      <div class="section-head row-between">
+        <div>
+          <h1>Budgets</h1>
+          <p>Set a limit per category, watch it as the month goes.</p>
+          <button class="info-toggle" onclick="toggleInfo('info-budgets')">ⓘ How this works</button>
+          <div class="info-panel" id="info-budgets">
+            Set a monthly spending limit for a category — say ₦20,000 for Food. As you log expense entries in that category this month, the bar fills up. Cross the limit and it's flagged as over budget. It resets naturally each month since it only counts the current month's spending.
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="openBudgetForm()">+ Set budget</button>
+      </div>
+
+      <div class="panel" id="budgetPanel">
+        <h3>Set a budget</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label for="budgetCategory">Category</label>
+            <select id="budgetCategory"></select>
+          </div>
+          <div class="field">
+            <label for="budgetAmount">Monthly limit</label>
+            <input type="number" id="budgetAmount" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" onclick="submitBudget()">Save budget</button>
+          <button class="btn" onclick="closeBudgetForm()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="item-list" id="budgetList"></div>
+    </section>
+
+    <!-- GOALS -->
+    <section class="section" id="goals">
+      <div class="section-head row-between">
+        <div>
+          <h1>Savings Goals</h1>
+          <p>Name what you're saving for. Watch it get closer.</p>
+          <button class="info-toggle" onclick="toggleInfo('info-goals')">ⓘ How this works</button>
+          <div class="info-panel" id="info-goals">
+            Goals aren't pulled from your transactions automatically — they're separate and manual. Name something you're saving toward, set a target, then tap "Add funds" whenever you set money aside for it. Good for tracking progress on something specific, like an emergency fund or a big purchase.
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="openGoalForm()">+ New goal</button>
+      </div>
+
+      <div class="panel" id="goalPanel">
+        <h3>New savings goal</h3>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="goalName">Goal name</label>
+            <input type="text" id="goalName" placeholder="e.g. Emergency fund, new laptop">
+          </div>
+          <div class="field">
+            <label for="goalTarget">Target amount</label>
+            <input type="number" id="goalTarget" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label for="goalSaved">Already saved</label>
+            <input type="number" id="goalSaved" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-primary" onclick="submitGoal()">Save goal</button>
+          <button class="btn" onclick="closeGoalForm()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="item-list" id="goalList"></div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="section" id="settings">
+      <div class="section-head">
+        <h1>Settings</h1>
+        <p>Small preferences, kept simple.</p>
+        <button class="info-toggle" onclick="toggleInfo('info-settings')">ⓘ How this works</button>
+        <div class="info-panel" id="info-settings">
+          Your account and ledger are synced to your private Firebase account, so you can use FinancePro across devices. Export a full backup occasionally so you also keep a copy you control.
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Account</h3>
+        <p>Signed in as <strong id="accountEmail"></strong>.</p>
+        <button class="btn" onclick="signOut()">Log out</button>
+      </div>
+
+      <div class="settings-block">
+        <h3>Currency</h3>
+        <p>Choose the symbol used across your ledger.</p>
+        <div class="currency-options" id="currencyOptions"></div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Money accounts</h3>
+        <p>Separate your cash, bank, card, and savings balances.</p>
+        <div class="inline-form">
+          <input type="text" id="accountName" placeholder="e.g. Main bank account">
+          <button class="btn" onclick="addAccount()">Add account</button>
+        </div>
+        <div class="manage-list" id="accountList"></div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Categories</h3>
+        <p>Add categories that match the way you actually spend and earn.</p>
+        <div class="inline-form">
+          <select id="newCategoryType"><option value="expense">Expense</option><option value="income">Income</option></select>
+          <input type="text" id="categoryName" placeholder="e.g. Childcare">
+          <button class="btn" onclick="addCategory()">Add category</button>
+        </div>
+        <div class="manage-list" id="categoryList"></div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Privacy lock</h3>
+        <p>Set a PIN, then use Lock now whenever you leave the app. This is a convenience lock, not encryption.</p>
+        <div class="inline-form">
+          <input type="password" id="pinValue" inputmode="numeric" maxlength="6" placeholder="4–6 digit PIN">
+          <button class="btn" onclick="savePin()">Set PIN</button>
+          <button class="btn btn-ghost" onclick="removePin()">Remove PIN</button>
+          <button class="btn btn-ghost" onclick="lockApp()">Lock now</button>
+        </div>
+        <div class="settings-status" id="pinStatus" role="status"></div>
+      </div>
+
+      <div class="settings-block">
+        <h3>Backup your data</h3>
+        <p>Export a portable copy of your complete ledger, including budgets, goals, templates, and recurring entries.</p>
+        <div class="settings-actions">
+          <button class="btn" onclick="exportBackup()">Download full backup</button>
+          <button class="btn" onclick="document.getElementById('backupFile').click()">Restore backup</button>
+          <input type="file" id="backupFile" accept="application/json" hidden onchange="importBackup(event)">
+          <button class="btn" onclick="document.getElementById('csvFile').click()">Import bank CSV</button>
+          <input type="file" id="csvFile" accept=".csv,text/csv" hidden onchange="importCSV(event)">
+        </div>
+        <button class="btn btn-ghost" onclick="exportCSV()">Export transactions as CSV</button>
+      </div>
+
+      <div class="settings-block">
+        <h3>Reset data</h3>
+        <p>Clears every transaction, budget, goal, and template from this device. This can't be undone.</p>
+        <button class="btn" style="border-color:var(--expense); color:var(--expense);" onclick="resetAll()">Clear all data</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast" id="toast">
+  <span id="toastMsg"></span>
+  <button id="toastUndo">Undo</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCrbSDZcMsbgnzf34hx-3il35zQZD8rDOs",
+    authDomain: "financepro-4299f.firebaseapp.com",
+    projectId: "financepro-4299f",
+    storageBucket: "financepro-4299f.firebasestorage.app",
+    messagingSenderId: "477333877820",
+    appId: "1:477333877820:web:425ab5f2b8a4642c103f39",
+    measurementId: "G-J6W9N6SMND"
+  };
+  firebase.initializeApp(firebaseConfig);
+  window.financeAuth = firebase.auth();
+  window.financeDb = firebase.firestore();
+</script>
+<script src="script.js?v=13"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
