@@ -270,6 +270,7 @@
   .modal-card{
     background:var(--surface); border:1px solid var(--rule-strong); border-radius:8px;
     padding:30px 28px; max-width:440px; width:100%;
+    max-height:calc(100vh - 40px); overflow-y:auto;
     box-shadow:0 20px 60px rgba(0,0,0,0.5);
   }
   .modal-card h2{ font-size:22px; font-weight:500; margin:4px 0 14px; }
@@ -449,6 +450,7 @@
     .health-head,.report-head{align-items:flex-start;}
     .year-bars{min-width:440px;}
     .year-report{overflow-x:auto;}
+    .l-actions{opacity:1;}
   }
 
   :focus-visible{outline:2px solid var(--gold); outline-offset:2px;}

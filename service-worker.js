@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v9-security-choice';
+const CACHE_NAME = 'financepro-v10-production-hardening';
 const ASSETS = [
   './index.html',
   './style.css',
@@ -25,16 +25,16 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  const requestURL = new URL(event.request.url);
+  if(requestURL.origin !== self.location.origin || event.request.method !== 'GET') return;
+  const cacheable = ['/', '/index.html', '/style.css', '/script.js', '/manifest.json', '/icon-192.png', '/icon-512.png'].includes(requestURL.pathname);
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request).then(response => {
-        // Cache new same-origin GET requests as we go
-        if (event.request.method === 'GET' && response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-    })
+    fetch(event.request).then(response => {
+      if(response.ok && cacheable){
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });

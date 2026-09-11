@@ -17,18 +17,24 @@ function createEmptyState(){
     currency:'₦'
   };
 }
+function safeReceiptURL(value){
+  try {
+    const url = new URL(String(value));
+    return url.protocol === 'https:' ? url.href : '';
+  } catch { return ''; }
+}
 function normalizeState(value){
   const base = createEmptyState();
   const next = {...base, ...(value || {})};
-  next.transactions = Array.isArray(next.transactions) ? next.transactions.map(t=>({
-    ...t, accountId:t.accountId || 'cash', notes:t.notes || '', receipt:t.receipt || ''
-  })) : [];
+  const normalizeTransaction = t=>{
+    if(!t || (t.type!=='income' && t.type!=='expense') || !Number.isFinite(Number(t.amount)) || Number(t.amount)<=0 || !/^\d{4}-\d{2}-\d{2}$/.test(String(t.date)) || typeof t.desc!=='string') return null;
+    return {...t, id:typeof t.id==='string' ? t.id : uid(), amount:Number(t.amount), desc:t.desc.slice(0,240), accountId:t.accountId || 'cash', notes:typeof t.notes==='string' ? t.notes.slice(0,500) : '', receipt:safeReceiptURL(t.receipt)};
+  };
+  next.transactions = Array.isArray(next.transactions) ? next.transactions.map(normalizeTransaction).filter(Boolean) : [];
   next.budgets = Array.isArray(next.budgets) ? next.budgets : [];
   next.goals = Array.isArray(next.goals) ? next.goals : [];
   next.templates = Array.isArray(next.templates) ? next.templates : [];
-  next.recurring = Array.isArray(next.recurring) ? next.recurring.map(r=>({
-    ...r, accountId:r.accountId || 'cash', notes:r.notes || '', receipt:r.receipt || ''
-  })) : [];
+  next.recurring = Array.isArray(next.recurring) ? next.recurring.map(r=>({...r, accountId:r.accountId || 'cash', notes:typeof r.notes==='string' ? r.notes.slice(0,500) : '', receipt:safeReceiptURL(r.receipt)})).filter(r=>r && typeof r.desc==='string' && Number(r.amount)>0) : [];
   next.accounts = Array.isArray(next.accounts) && next.accounts.length ? next.accounts : base.accounts;
   const accountIds = new Set(next.accounts.map(a=>a.id));
   const fallbackAccount = next.accounts[0].id;
@@ -128,16 +134,21 @@ async function sendPasswordReset(){
 }
 async function startSession(user){
   currentUser = user;
-  const snapshot = await userDoc().get();
-  if(snapshot.exists){ state = normalizeState(snapshot.data()); }
-  else { loadLocalState(); persist(); }
-  document.getElementById('authGate').style.display = 'none';
-  document.getElementById('accountEmail').textContent = user.email || 'Google account';
-  document.body.classList.remove('auth-locked');
-  generateDueRecurring();
-  renderAll();
-  showWelcomeIfNeeded();
-  showSecuritySetupIfNeeded();
+  try {
+    const snapshot = await userDoc().get();
+    if(snapshot.exists){ state = normalizeState(snapshot.data()); }
+    else { loadLocalState(); persist(); }
+    document.getElementById('authGate').style.display = 'none';
+    document.getElementById('accountEmail').textContent = user.email || 'Google account';
+    document.body.classList.remove('auth-locked');
+    generateDueRecurring();
+    renderAll();
+    showWelcomeIfNeeded();
+    showSecuritySetupIfNeeded();
+  } catch(error){
+    currentUser = null;
+    setAuthError(`Could not load your ledger: ${error.message || 'check your connection and try again.'}`);
+  }
 }
 function signOut(){
   financeAuth.signOut();
@@ -359,13 +370,20 @@ function generateDueRecurring(){
   const nowKey = todayISO().slice(0,7);
   let changed = false;
   state.recurring.forEach(r=>{
-    if(r.lastGeneratedMonth < nowKey){
-      const [y,m] = nowKey.split('-');
-      const daysInMonth = new Date(Number(y), Number(m), 0).getDate();
+    let cursor = r.lastGeneratedMonth || nowKey;
+    let safety = 0;
+    while(cursor < nowKey && safety < 24){
+      const [year, month] = cursor.split('-').map(Number);
+      const nextDate = new Date(year, month, 1);
+      const nextKey = `${nextDate.getFullYear()}-${String(nextDate.getMonth()+1).padStart(2,'0')}`;
+      const daysInMonth = new Date(nextDate.getFullYear(), nextDate.getMonth()+1, 0).getDate();
       const day = Math.min(r.dayOfMonth, daysInMonth);
-      const dateStr = `${nowKey}-${String(day).padStart(2,'0')}`;
-      state.transactions.push({ id:uid(), type:r.type, amount:r.amount, category:r.category, accountId:r.accountId || 'cash', notes:r.notes || '', receipt:r.receipt || '', desc:r.desc, date:dateStr });
-      r.lastGeneratedMonth = nowKey;
+      const dateStr = `${nextKey}-${String(day).padStart(2,'0')}`;
+      const duplicate = state.transactions.some(t=>t.date===dateStr && t.type===r.type && Number(t.amount)===Number(r.amount) && t.desc===r.desc && (t.accountId || 'cash')===(r.accountId || 'cash'));
+      if(!duplicate) state.transactions.push({ id:uid(), type:r.type, amount:r.amount, category:r.category, accountId:r.accountId || 'cash', notes:r.notes || '', receipt:r.receipt || '', desc:r.desc, date:dateStr });
+      cursor = nextKey;
+      r.lastGeneratedMonth = nextKey;
+      safety++;
       changed = true;
     }
   });
@@ -727,6 +745,9 @@ function addAccount(){
 function removeAccount(id){
   if(state.accounts.length===1) return;
   if(state.transactions.some(t=>(t.accountId||'cash')===id) && !confirm('Transactions use this account. Remove the account anyway?')) return;
+  const fallback = state.accounts.find(a=>a.id!==id).id;
+  state.transactions.forEach(t=>{ if((t.accountId || 'cash')===id) t.accountId = fallback; });
+  state.recurring.forEach(r=>{ if((r.accountId || 'cash')===id) r.accountId = fallback; });
   state.accounts = state.accounts.filter(a=>a.id!==id); persist(); renderAll();
 }
 function addCategory(){
@@ -747,15 +768,23 @@ function resetAll(){
   persist(); renderAll();
 }
 
-function savePin(){
+async function hashPin(pin){
+  let salt = localStorage.getItem(`fp_pinSalt_${currentUser.uid}`);
+  if(!salt){ salt = toBase64Url(randomBytes(16)); localStorage.setItem(`fp_pinSalt_${currentUser.uid}`, salt); }
+  const data = new TextEncoder().encode(`${salt}:${pin}`);
+  return toBase64Url(await crypto.subtle.digest('SHA-256', data));
+}
+async function savePin(){
   const pin = document.getElementById('pinValue').value.trim();
   if(!/^\d{4,6}$/.test(pin)) return setSettingsStatus('Use a 4–6 digit PIN.', true);
-  localStorage.setItem(`fp_pin_${currentUser.uid}`, pin);
+  localStorage.setItem(`fp_pin_${currentUser.uid}`, await hashPin(pin));
   document.getElementById('pinValue').value='';
   setSettingsStatus('PIN saved. Use Lock now when you want to lock the app.');
 }
 function removePin(){
   localStorage.removeItem(`fp_pin_${currentUser.uid}`);
+  localStorage.removeItem(`fp_pinSalt_${currentUser.uid}`);
+  localStorage.removeItem(`fp_biometric_${currentUser.uid}`);
   document.getElementById('pinValue').value='';
   document.getElementById('pinOverlay').classList.remove('show');
   setSettingsStatus('PIN removed.');
@@ -767,13 +796,13 @@ function lockApp(){
   document.getElementById('pinError').textContent='';
   document.getElementById('pinOverlay').classList.add('show');
 }
-function setSecurityPin(){
+async function setSecurityPin(){
   const pin = document.getElementById('setupPin').value.trim();
   const confirmPin = document.getElementById('setupPinConfirm').value.trim();
   const error = document.getElementById('securitySetupError');
   if(!/^\d{4,6}$/.test(pin)){ error.textContent='Use a 4–6 digit PIN.'; return; }
   if(pin !== confirmPin){ error.textContent='The PINs do not match.'; return; }
-  localStorage.setItem(`fp_pin_${currentUser.uid}`, pin);
+  localStorage.setItem(`fp_pin_${currentUser.uid}`, await hashPin(pin));
   localStorage.setItem(`fp_seenSecurity_${currentUser.uid}`, '1');
   document.getElementById('securitySetupOverlay').classList.remove('show');
 }
@@ -824,10 +853,12 @@ function setSettingsStatus(message, isError=false){
   const status = document.getElementById('pinStatus');
   if(status){ status.textContent = message; status.classList.toggle('error', isError); }
 }
-function unlockApp(){
+async function unlockApp(){
   const expected = localStorage.getItem(`fp_pin_${currentUser.uid}`);
   const entered = document.getElementById('unlockPin').value;
-  if(entered !== expected){ document.getElementById('pinError').textContent='That PIN is incorrect.'; return; }
+  const matches = expected && expected.length > 10 ? await hashPin(entered) === expected : entered === expected;
+  if(!matches){ document.getElementById('pinError').textContent='That PIN is incorrect.'; return; }
+  if(expected.length <= 10) localStorage.setItem(`fp_pin_${currentUser.uid}`, await hashPin(entered));
   document.getElementById('unlockPin').value='';
   document.getElementById('pinError').textContent='';
   document.getElementById('pinOverlay').classList.remove('show');
@@ -941,7 +972,8 @@ function exportCSV(){
   if(!state.transactions.length){ alert('No transactions to export yet.'); return; }
   const rows = [['Date','Type','Category','Description','Amount']];
   [...state.transactions].sort((a,b)=> new Date(a.date)-new Date(b.date)).forEach(t=>{
-    rows.push([t.date, t.type, t.category, t.desc.replace(/"/g,'""'), t.amount]);
+    const description = /^[=+\-@]/.test(t.desc) ? `'${t.desc}` : t.desc;
+    rows.push([t.date, t.type, t.category, description.replace(/"/g,'""'), t.amount]);
   });
   const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
   downloadFile(csv, `financepro-export-${todayISO()}.csv`, 'text/csv;charset=utf-8;');
