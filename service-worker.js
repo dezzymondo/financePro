@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v6-features';
+const CACHE_NAME = 'financepro-v7-controls';
 const ASSETS = [
   './index.html',
   './style.css',

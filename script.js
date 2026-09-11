@@ -137,7 +137,6 @@ async function startSession(user){
   generateDueRecurring();
   renderAll();
   showWelcomeIfNeeded();
-  if(shouldLock()) document.getElementById('pinOverlay').classList.add('show');
 }
 function signOut(){
   financeAuth.signOut();
@@ -707,9 +706,9 @@ function setCurrency(c){ state.currency = c; persist(); renderAll(); }
 function addAccount(){
   const input = document.getElementById('accountName');
   const name = input.value.trim();
-  if(!name) return;
-  if(state.accounts.some(a=>a.name.toLowerCase()===name.toLowerCase())) return alert('That account already exists.');
-  state.accounts.push({id:uid(), name}); input.value=''; persist(); renderAll();
+  if(!name) return setSettingsStatus('Enter an account name first.', true);
+  if(state.accounts.some(a=>a.name.toLowerCase()===name.toLowerCase())) return setSettingsStatus('That account already exists.', true);
+  state.accounts.push({id:uid(), name}); input.value=''; persist(); renderAll(); setSettingsStatus(`Added ${name}.`);
 }
 function removeAccount(id){
   if(state.accounts.length===1) return;
@@ -720,9 +719,9 @@ function addCategory(){
   const type = document.getElementById('newCategoryType').value;
   const input = document.getElementById('categoryName');
   const name = input.value.trim();
-  if(!name) return;
-  if([...CATEGORIES[type],...state.customCategories[type]].some(c=>c.toLowerCase()===name.toLowerCase())) return alert('That category already exists.');
-  state.customCategories[type].push(name); input.value=''; persist(); renderAll();
+  if(!name) return setSettingsStatus('Enter a category name first.', true);
+  if([...CATEGORIES[type],...state.customCategories[type]].some(c=>c.toLowerCase()===name.toLowerCase())) return setSettingsStatus('That category already exists.', true);
+  state.customCategories[type].push(name); input.value=''; persist(); renderAll(); setSettingsStatus(`Added ${name}.`);
 }
 function removeCategory(type,name){
   state.customCategories[type] = state.customCategories[type].filter(c=>c!==decodeURIComponent(name)); persist(); renderAll();
@@ -736,17 +735,28 @@ function resetAll(){
 
 function savePin(){
   const pin = document.getElementById('pinValue').value.trim();
-  if(!/^\d{4,6}$/.test(pin)) return alert('Use a 4–6 digit PIN.');
+  if(!/^\d{4,6}$/.test(pin)) return setSettingsStatus('Use a 4–6 digit PIN.', true);
   localStorage.setItem(`fp_pin_${currentUser.uid}`, pin);
   document.getElementById('pinValue').value='';
-  alert('PIN saved for this browser.');
+  setSettingsStatus('PIN saved. Use Lock now when you want to lock the app.');
 }
 function removePin(){
   localStorage.removeItem(`fp_pin_${currentUser.uid}`);
   document.getElementById('pinValue').value='';
   document.getElementById('pinOverlay').classList.remove('show');
+  setSettingsStatus('PIN removed.');
 }
 function shouldLock(){ return Boolean(currentUser && localStorage.getItem(`fp_pin_${currentUser.uid}`)); }
+function lockApp(){
+  if(!shouldLock()) return setSettingsStatus('Set a PIN first, then lock the app.', true);
+  document.getElementById('unlockPin').value='';
+  document.getElementById('pinError').textContent='';
+  document.getElementById('pinOverlay').classList.add('show');
+}
+function setSettingsStatus(message, isError=false){
+  const status = document.getElementById('pinStatus');
+  if(status){ status.textContent = message; status.classList.toggle('error', isError); }
+}
 function unlockApp(){
   const expected = localStorage.getItem(`fp_pin_${currentUser.uid}`);
   const entered = document.getElementById('unlockPin').value;

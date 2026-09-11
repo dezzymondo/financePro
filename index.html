@@ -423,12 +423,14 @@
 
       <div class="settings-block">
         <h3>Privacy lock</h3>
-        <p>Require a PIN when returning to this browser. This is a convenience lock, not encryption.</p>
+        <p>Set a PIN, then use Lock now whenever you leave the app. This is a convenience lock, not encryption.</p>
         <div class="inline-form">
           <input type="password" id="pinValue" inputmode="numeric" maxlength="6" placeholder="4–6 digit PIN">
           <button class="btn" onclick="savePin()">Set PIN</button>
           <button class="btn btn-ghost" onclick="removePin()">Remove PIN</button>
+          <button class="btn btn-ghost" onclick="lockApp()">Lock now</button>
         </div>
+        <div class="settings-status" id="pinStatus" role="status"></div>
       </div>
 
       <div class="settings-block">
