@@ -4,13 +4,41 @@ const CATEGORIES = {
   income: ['Salary','Freelance','Gift','Other']
 };
 
-const DATA_FIELDS = ['transactions','budgets','goals','templates','recurring'];
+const DATA_FIELDS = ['transactions','budgets','goals','templates','recurring','accounts','customCategories'];
 let currentUser = null;
 let authMode = 'login';
 let state = createEmptyState();
 
 function createEmptyState(){
-  return {transactions:[], budgets:[], goals:[], templates:[], recurring:[], currency:'₦'};
+  return {
+    transactions:[], budgets:[], goals:[], templates:[], recurring:[],
+    accounts:[{id:'cash', name:'Cash'}],
+    customCategories:{expense:[], income:[]},
+    currency:'₦'
+  };
+}
+function normalizeState(value){
+  const base = createEmptyState();
+  const next = {...base, ...(value || {})};
+  next.transactions = Array.isArray(next.transactions) ? next.transactions.map(t=>({
+    ...t, accountId:t.accountId || 'cash', notes:t.notes || '', receipt:t.receipt || ''
+  })) : [];
+  next.budgets = Array.isArray(next.budgets) ? next.budgets : [];
+  next.goals = Array.isArray(next.goals) ? next.goals : [];
+  next.templates = Array.isArray(next.templates) ? next.templates : [];
+  next.recurring = Array.isArray(next.recurring) ? next.recurring.map(r=>({
+    ...r, accountId:r.accountId || 'cash', notes:r.notes || '', receipt:r.receipt || ''
+  })) : [];
+  next.accounts = Array.isArray(next.accounts) && next.accounts.length ? next.accounts : base.accounts;
+  const accountIds = new Set(next.accounts.map(a=>a.id));
+  const fallbackAccount = next.accounts[0].id;
+  next.transactions = next.transactions.map(t=>accountIds.has(t.accountId) ? t : {...t, accountId:fallbackAccount});
+  next.recurring = next.recurring.map(r=>accountIds.has(r.accountId) ? r : {...r, accountId:fallbackAccount});
+  next.customCategories = {
+    expense:Array.isArray(next.customCategories?.expense) ? next.customCategories.expense : [],
+    income:Array.isArray(next.customCategories?.income) ? next.customCategories.income : []
+  };
+  return next;
 }
 function userDoc(){ return financeDb.collection('users').doc(currentUser.uid); }
 function loadLocalState(){
@@ -22,6 +50,7 @@ function loadLocalState(){
     }
   });
   state.currency = localStorage.getItem('fp_currency') || '₦';
+  state = normalizeState(state);
 }
 
 function persist(){
@@ -100,7 +129,7 @@ async function sendPasswordReset(){
 async function startSession(user){
   currentUser = user;
   const snapshot = await userDoc().get();
-  if(snapshot.exists){ state = {...createEmptyState(), ...snapshot.data()}; }
+  if(snapshot.exists){ state = normalizeState(snapshot.data()); }
   else { loadLocalState(); persist(); }
   document.getElementById('authGate').style.display = 'none';
   document.getElementById('accountEmail').textContent = user.email || 'Google account';
@@ -108,6 +137,7 @@ async function startSession(user){
   generateDueRecurring();
   renderAll();
   showWelcomeIfNeeded();
+  if(shouldLock()) document.getElementById('pinOverlay').classList.add('show');
 }
 function signOut(){
   financeAuth.signOut();
@@ -119,6 +149,7 @@ function bootAuth(){
       currentUser = null;
       state = createEmptyState();
       document.getElementById('welcomeOverlay').classList.remove('show');
+      document.getElementById('pinOverlay').classList.remove('show');
       document.getElementById('authGate').style.display = 'flex';
       document.getElementById('authForm').reset();
       setAuthMode('login');
@@ -172,10 +203,15 @@ function goTo(name){
 
 /* ---------------- category selects ---------------- */
 function fillCategorySelect(sel, type){
-  sel.innerHTML = CATEGORIES[type].map(c=>`<option value="${c}">${c}</option>`).join('');
+  const categories = [...new Set([...CATEGORIES[type], ...state.customCategories[type]])];
+  sel.innerHTML = categories.map(c=>`<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
+}
+function fillAccountSelect(sel){
+  sel.innerHTML = state.accounts.map(a=>`<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
+  if(!sel.value && state.accounts[0]) sel.value = state.accounts[0].id;
 }
 function fillFilterCategories(){
-  const all = [...new Set(state.transactions.map(t=>t.category))].sort();
+  const all = [...new Set([...state.transactions.map(t=>t.category), ...CATEGORIES.expense, ...CATEGORIES.income, ...state.customCategories.expense, ...state.customCategories.income])].sort();
   const sel = document.getElementById('filterCategory');
   const current = sel.value;
   sel.innerHTML = '<option value="all">All categories</option>' + all.map(c=>`<option value="${c}">${c}</option>`).join('');
@@ -202,12 +238,15 @@ function openForm(){
   document.getElementById('txPanel').classList.add('open');
   document.getElementById('txAmount').value = '';
   document.getElementById('txDesc').value = '';
+  document.getElementById('txNotes').value = '';
+  document.getElementById('txReceipt').value = '';
   document.getElementById('txDate').value = todayISO();
   document.getElementById('txSaveTemplate').checked = false;
   document.getElementById('txRecurring').checked = false;
   document.getElementById('txExtrasRow').style.display = 'flex';
   document.querySelectorAll('#typeToggle button').forEach(b=>b.classList.toggle('on', b.dataset.type==='expense'));
   fillCategorySelect(document.getElementById('txCategory'), currentType);
+  fillAccountSelect(document.getElementById('txAccount'));
 }
 
 function editTransaction(id){
@@ -224,7 +263,11 @@ function editTransaction(id){
   document.getElementById('txCategory').value = t.category;
   document.getElementById('txAmount').value = t.amount;
   document.getElementById('txDesc').value = t.desc;
+  document.getElementById('txNotes').value = t.notes || '';
+  document.getElementById('txReceipt').value = t.receipt || '';
   document.getElementById('txDate').value = t.date;
+  fillAccountSelect(document.getElementById('txAccount'));
+  document.getElementById('txAccount').value = t.accountId || 'cash';
   document.getElementById('txPanel').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
@@ -237,15 +280,18 @@ function submitTransaction(){
   const amount = parseFloat(document.getElementById('txAmount').value);
   const desc = document.getElementById('txDesc').value.trim();
   const category = document.getElementById('txCategory').value;
+  const accountId = document.getElementById('txAccount').value || 'cash';
+  const notes = document.getElementById('txNotes').value.trim();
+  const receipt = document.getElementById('txReceipt').value.trim();
   const date = document.getElementById('txDate').value || todayISO();
   if(!amount || amount<=0){ alert('Enter an amount greater than zero.'); return; }
   if(!desc){ alert('Give this entry a short description.'); return; }
 
   if(editingId){
     const t = state.transactions.find(x=>x.id===editingId);
-    if(t){ t.type = currentType; t.amount = amount; t.category = category; t.desc = desc; t.date = date; }
+    if(t){ t.type = currentType; t.amount = amount; t.category = category; t.accountId = accountId; t.notes = notes; t.receipt = receipt; t.desc = desc; t.date = date; }
   } else {
-    state.transactions.push({ id:uid(), type:currentType, amount, category, desc, date });
+    state.transactions.push({ id:uid(), type:currentType, amount, category, accountId, notes, receipt, desc, date });
 
     if(document.getElementById('txSaveTemplate').checked){
       const dup = state.templates.find(tp => tp.type===currentType && tp.category===category && tp.desc.toLowerCase()===desc.toLowerCase() && Number(tp.amount)===amount);
@@ -253,7 +299,7 @@ function submitTransaction(){
     }
     if(document.getElementById('txRecurring').checked){
       state.recurring.push({
-        id:uid(), type:currentType, amount, category, desc,
+        id:uid(), type:currentType, amount, category, accountId, notes, receipt, desc,
         dayOfMonth: Number(date.slice(8,10)),
         lastGeneratedMonth: date.slice(0,7) // this instance already covers its own month
       });
@@ -268,7 +314,7 @@ function submitTransaction(){
 function useTemplate(id){
   const tpl = state.templates.find(t=>t.id===id);
   if(!tpl) return;
-  state.transactions.push({ id:uid(), type:tpl.type, amount:tpl.amount, category:tpl.category, desc:tpl.desc, date:todayISO() });
+  state.transactions.push({ id:uid(), type:tpl.type, amount:tpl.amount, category:tpl.category, accountId:tpl.accountId || 'cash', notes:tpl.notes || '', receipt:tpl.receipt || '', desc:tpl.desc, date:todayISO() });
   persist();
   renderAll();
   showUndoToast(`Added: ${tpl.desc}`, () => {
@@ -305,7 +351,7 @@ function generateDueRecurring(){
       const daysInMonth = new Date(Number(y), Number(m), 0).getDate();
       const day = Math.min(r.dayOfMonth, daysInMonth);
       const dateStr = `${nowKey}-${String(day).padStart(2,'0')}`;
-      state.transactions.push({ id:uid(), type:r.type, amount:r.amount, category:r.category, desc:r.desc, date:dateStr });
+      state.transactions.push({ id:uid(), type:r.type, amount:r.amount, category:r.category, accountId:r.accountId || 'cash', notes:r.notes || '', receipt:r.receipt || '', desc:r.desc, date:dateStr });
       r.lastGeneratedMonth = nowKey;
       changed = true;
     }
@@ -326,10 +372,17 @@ function renderRecurring(){
     <div class="recurring-row">
       <div>
         <div class="rr-info">${escapeHTML(r.desc)} — ${cur()}${fmt(r.amount)}</div>
-        <div class="rr-sub">${r.category} · logs on day ${r.dayOfMonth} of each month</div>
+        <div class="rr-sub">${r.category} · ${escapeHTML(accountName(r.accountId))} · logs on day ${r.dayOfMonth} of each month${recurringReminder(r) ? ` · <span class="reminder">${recurringReminder(r)}</span>` : ''}</div>
       </div>
       <button onclick="stopRecurring('${r.id}')">Stop repeating</button>
     </div>`).join('');
+}
+function recurringReminder(rule){
+  const now = new Date();
+  const day = Math.min(rule.dayOfMonth, new Date(now.getFullYear(), now.getMonth()+1, 0).getDate());
+  const due = new Date(now.getFullYear(), now.getMonth(), day);
+  const days = Math.ceil((due - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  return days >= 0 && days <= 3 ? (days === 0 ? 'due today' : `due in ${days} day${days===1?'':'s'}`) : '';
 }
 
 function deleteTransaction(id){
@@ -353,7 +406,7 @@ function ledgerRow(t){
     <div class="tick ${t.type}"></div>
     <div class="l-main">
       <div class="l-desc">${escapeHTML(t.desc)}</div>
-      <div class="l-meta"><span class="cat">${t.category}</span> · ${formatDate(t.date)}</div>
+      <div class="l-meta"><span class="cat">${escapeHTML(t.category)}</span> · ${escapeHTML(accountName(t.accountId))} · ${formatDate(t.date)}${t.notes ? ` · ${escapeHTML(t.notes)}` : ''}${t.receipt ? ` · <a class="receipt-link" href="${escapeHTML(t.receipt)}" target="_blank" rel="noopener">receipt</a>` : ''}</div>
     </div>
     <div class="l-amount mono ${t.type}">${sign}${cur()}${fmt(t.amount)}</div>
     <div class="l-actions">
@@ -385,12 +438,33 @@ function renderDashboard(){
   const box = document.getElementById('dashRecent');
   box.innerHTML = recent.length ? recent.map(ledgerRow).join('') :
     `<div class="empty"><strong>No entries yet.</strong>Add your first transaction to start the ledger.</div>`;
+  renderHealth();
 }
 function sum(list){ return list.reduce((a,t)=>a+Number(t.amount),0); }
+function accountName(id){ return state.accounts.find(a=>a.id===id)?.name || 'Cash'; }
+function renderHealth(){
+  const month = todayISO().slice(0,7);
+  const rows = state.transactions.filter(t=>t.date.slice(0,7)===month);
+  const income = sum(rows.filter(t=>t.type==='income'));
+  const expenses = sum(rows.filter(t=>t.type==='expense'));
+  const budgetTotal = state.budgets.reduce((total,b)=>total+Number(b.amount),0);
+  const saved = income-expenses;
+  document.getElementById('healthPeriod').textContent = new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  document.getElementById('healthGrid').innerHTML = [
+    ['Net this month', `${cur()}${fmt(saved)}`, saved >= 0 ? 'positive' : 'negative'],
+    ['Savings rate', income ? `${Math.round(saved/income*100)}%` : '—', saved >= 0 ? 'positive' : 'negative'],
+    ['Budget used', budgetTotal ? `${Math.round(expenses/budgetTotal*100)}%` : '—', budgetTotal && expenses > budgetTotal ? 'negative' : 'positive'],
+    ['Goals in progress', `${state.goals.filter(g=>g.saved < g.target).length}`, 'neutral']
+  ].map(([label,value,kind])=>`<div class="health-card ${kind}"><span>${label}</span><strong class="mono">${value}</strong></div>`).join('');
+}
 
 /* ---------------- transactions section ---------------- */
 function renderTransactions(){
   fillFilterCategories();
+  const accountFilter = document.getElementById('filterAccount');
+  const currentAccount = accountFilter.value;
+  accountFilter.innerHTML = '<option value="all">All accounts</option>' + state.accounts.map(a=>`<option value="${a.id}">${escapeHTML(a.name)}</option>`).join('');
+  if([...accountFilter.options].some(o=>o.value===currentAccount)) accountFilter.value = currentAccount;
   const q = document.getElementById('searchInput').value.toLowerCase();
   const fc = document.getElementById('filterCategory').value;
   const ft = document.getElementById('filterType').value;
@@ -398,8 +472,9 @@ function renderTransactions(){
 
   let list = state.transactions.filter(t=>{
     if(fc!=='all' && t.category!==fc) return false;
+    if(accountFilter.value!=='all' && (t.accountId || 'cash')!==accountFilter.value) return false;
     if(ft!=='all' && t.type!==ft) return false;
-    if(q && !(t.desc.toLowerCase().includes(q) || t.category.toLowerCase().includes(q))) return false;
+    if(q && !(t.desc.toLowerCase().includes(q) || t.category.toLowerCase().includes(q) || (t.notes || '').toLowerCase().includes(q))) return false;
     return true;
   });
 
@@ -456,6 +531,7 @@ function renderTrendChart(){
 
 function renderAnalytics(){
   renderTrendChart();
+  renderYearReport();
 
   // "This month" snapshot — filtered to the current calendar month, not all-time
   const nowKey = todayISO().slice(0,7);
@@ -479,6 +555,25 @@ function renderAnalytics(){
       <div class="bar-track"><div class="bar-fill" style="width:${(amt/max*100).toFixed(1)}%"></div></div>
     </div>`).join('') :
     `<div class="empty"><strong>No spending logged this month.</strong>Once you add expenses, their breakdown shows up here.</div>`;
+}
+
+function renderYearReport(){
+  const select = document.getElementById('reportYear');
+  const years = [...new Set([todayISO().slice(0,4), ...state.transactions.map(t=>t.date.slice(0,4))])].sort().reverse();
+  const current = select.value || years[0];
+  select.innerHTML = years.map(year=>`<option value="${year}">${year}</option>`).join('');
+  select.value = years.includes(current) ? current : years[0];
+  const rows = state.transactions.filter(t=>t.date.startsWith(select.value));
+  const income = sum(rows.filter(t=>t.type==='income'));
+  const expense = sum(rows.filter(t=>t.type==='expense'));
+  const byMonth = Array.from({length:12},(_,index)=>{
+    const key = `${select.value}-${String(index+1).padStart(2,'0')}`;
+    const monthRows = rows.filter(t=>t.date.startsWith(key));
+    return {label:new Date(Number(select.value),index,1).toLocaleDateString('en-GB',{month:'short'}), income:sum(monthRows.filter(t=>t.type==='income')), expense:sum(monthRows.filter(t=>t.type==='expense'))};
+  });
+  document.getElementById('yearReport').innerHTML = `
+    <div class="report-summary"><span>Income <strong class="mono">${cur()}${fmt(income)}</strong></span><span>Expenses <strong class="mono">${cur()}${fmt(expense)}</strong></span><span>Net <strong class="mono">${cur()}${fmt(income-expense)}</strong></span></div>
+    <div class="year-bars">${byMonth.map(m=>`<div class="year-month"><div class="year-bar-pair"><i class="income" style="height:${Math.max(2,Math.min(100,m.income/(Math.max(income,expense,1)/12)*100))}px"></i><i class="expense" style="height:${Math.max(2,Math.min(100,m.expense/(Math.max(income,expense,1)/12)*100))}px"></i></div><small>${m.label}</small></div>`).join('')}</div>`;
 }
 
 /* ---------------- budgets ---------------- */
@@ -605,12 +700,60 @@ const CUR_OPTIONS = ['₦','$','€','£'];
 function renderSettings(){
   const box = document.getElementById('currencyOptions');
   box.innerHTML = CUR_OPTIONS.map(c=>`<button class="cur-opt ${c===state.currency?'active':''}" onclick="setCurrency('${c}')">${c}</button>`).join('');
+  document.getElementById('accountList').innerHTML = state.accounts.map(a=>`<div class="manage-row"><span>${escapeHTML(a.name)}</span>${state.accounts.length > 1 ? `<button onclick="removeAccount('${a.id}')">Remove</button>` : ''}</div>`).join('');
+  document.getElementById('categoryList').innerHTML = ['expense','income'].map(type=>state.customCategories[type].map(name=>`<div class="manage-row"><span>${escapeHTML(name)} <small>${type}</small></span><button onclick="removeCategory('${type}','${encodeURIComponent(name)}')">Remove</button></div>`).join('')).join('') || '<div class="empty compact">No custom categories yet.</div>';
 }
 function setCurrency(c){ state.currency = c; persist(); renderAll(); }
+function addAccount(){
+  const input = document.getElementById('accountName');
+  const name = input.value.trim();
+  if(!name) return;
+  if(state.accounts.some(a=>a.name.toLowerCase()===name.toLowerCase())) return alert('That account already exists.');
+  state.accounts.push({id:uid(), name}); input.value=''; persist(); renderAll();
+}
+function removeAccount(id){
+  if(state.accounts.length===1) return;
+  if(state.transactions.some(t=>(t.accountId||'cash')===id) && !confirm('Transactions use this account. Remove the account anyway?')) return;
+  state.accounts = state.accounts.filter(a=>a.id!==id); persist(); renderAll();
+}
+function addCategory(){
+  const type = document.getElementById('newCategoryType').value;
+  const input = document.getElementById('categoryName');
+  const name = input.value.trim();
+  if(!name) return;
+  if([...CATEGORIES[type],...state.customCategories[type]].some(c=>c.toLowerCase()===name.toLowerCase())) return alert('That category already exists.');
+  state.customCategories[type].push(name); input.value=''; persist(); renderAll();
+}
+function removeCategory(type,name){
+  state.customCategories[type] = state.customCategories[type].filter(c=>c!==decodeURIComponent(name)); persist(); renderAll();
+}
 function resetAll(){
   if(!confirm('Clear every transaction, budget, goal, and template? This cannot be undone.')) return;
   state.transactions = []; state.budgets = []; state.goals = []; state.templates = []; state.recurring = [];
+  state.accounts = [{id:'cash', name:'Cash'}]; state.customCategories = {expense:[], income:[]};
   persist(); renderAll();
+}
+
+function savePin(){
+  const pin = document.getElementById('pinValue').value.trim();
+  if(!/^\d{4,6}$/.test(pin)) return alert('Use a 4–6 digit PIN.');
+  localStorage.setItem(`fp_pin_${currentUser.uid}`, pin);
+  document.getElementById('pinValue').value='';
+  alert('PIN saved for this browser.');
+}
+function removePin(){
+  localStorage.removeItem(`fp_pin_${currentUser.uid}`);
+  document.getElementById('pinValue').value='';
+  document.getElementById('pinOverlay').classList.remove('show');
+}
+function shouldLock(){ return Boolean(currentUser && localStorage.getItem(`fp_pin_${currentUser.uid}`)); }
+function unlockApp(){
+  const expected = localStorage.getItem(`fp_pin_${currentUser.uid}`);
+  const entered = document.getElementById('unlockPin').value;
+  if(entered !== expected){ document.getElementById('pinError').textContent='That PIN is incorrect.'; return; }
+  document.getElementById('unlockPin').value='';
+  document.getElementById('pinError').textContent='';
+  document.getElementById('pinOverlay').classList.remove('show');
 }
 
 /* ---------------- backup and CSV export ---------------- */
@@ -635,7 +778,9 @@ function exportBackup(){
     budgets: state.budgets,
     goals: state.goals,
     templates: state.templates,
-    recurring: state.recurring
+    recurring: state.recurring,
+    accounts: state.accounts,
+    customCategories: state.customCategories
   };
   downloadFile(JSON.stringify(backup, null, 2), `financepro-backup-${todayISO()}.json`, 'application/json');
 }
@@ -648,24 +793,70 @@ function importBackup(event){
     try {
       const backup = JSON.parse(reader.result);
       const valid = backup && backup.app === 'FinancePro' &&
-        DATA_FIELDS.every(field=>Array.isArray(backup[field]));
+        Array.isArray(backup.transactions) && Array.isArray(backup.budgets) &&
+        Array.isArray(backup.goals) && Array.isArray(backup.templates) &&
+        Array.isArray(backup.recurring);
       if(!valid) throw new Error('This is not a valid FinancePro backup.');
       if(!confirm('Restore this backup? Your current ledger will be replaced.')) return;
-      state = {
-        ...createEmptyState(),
+      state = normalizeState({
         currency: CUR_OPTIONS.includes(backup.currency) ? backup.currency : '₦',
         transactions: backup.transactions,
         budgets: backup.budgets,
         goals: backup.goals,
         templates: backup.templates,
-        recurring: backup.recurring
-      };
+        recurring: backup.recurring,
+        accounts: backup.accounts,
+        customCategories: backup.customCategories
+      });
       persist();
       renderAll();
       alert('Backup restored successfully.');
     } catch(error){
       alert(error.message || 'Could not read this backup file.');
     }
+  };
+  reader.readAsText(file);
+}
+function parseCSVLine(line){
+  const values=[]; let value=''; let quoted=false;
+  for(let i=0;i<line.length;i++){
+    const char=line[i];
+    if(char==='"' && line[i+1]==='"' && quoted){ value+='"'; i++; }
+    else if(char==='"'){ quoted=!quoted; }
+    else if(char===',' && !quoted){ values.push(value.trim()); value=''; }
+    else value+=char;
+  }
+  values.push(value.trim());
+  return values;
+}
+function importCSV(event){
+  const file = event.target.files[0]; event.target.value=''; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const lines = String(reader.result).split(/\r?\n/).filter(Boolean);
+    if(lines.length < 2) return alert('This CSV has no transaction rows.');
+    const headers = parseCSVLine(lines[0]).map(h=>h.toLowerCase());
+    const find = names => names.map(n=>headers.indexOf(n)).find(i=>i >= 0);
+    const dateIndex=find(['date','transaction date']);
+    const amountIndex=find(['amount','value']);
+    const descIndex=find(['description','merchant','details','memo']);
+    const typeIndex=find(['type','transaction type']);
+    const categoryIndex=find(['category']);
+    if(dateIndex === undefined || amountIndex === undefined) return alert('CSV needs Date and Amount columns.');
+    const existing = new Set(state.transactions.map(t=>`${t.date}|${t.amount}|${t.desc}`));
+    let added=0;
+    lines.slice(1).forEach(line=>{
+      const row=parseCSVLine(line); const amount=Number(String(row[amountIndex] || '').replace(/[^0-9.-]/g,''));
+      const date=row[dateIndex]; const desc=row[descIndex] || 'Imported transaction';
+      if(!date || !amount) return;
+      const type = typeIndex !== undefined ? (String(row[typeIndex]).toLowerCase().includes('income') || amount > 0 ? 'income' : 'expense') : (amount >= 0 ? 'income' : 'expense');
+      const absolute=Math.abs(amount); const key=`${date}|${absolute}|${desc}`;
+      if(existing.has(key)) return;
+      state.transactions.push({id:uid(), date, amount:absolute, type, desc, notes:'Imported from CSV', category:categoryIndex !== undefined && row[categoryIndex] ? row[categoryIndex] : (type==='income'?'Other':'Other'), accountId:'cash'});
+      existing.add(key); added++;
+    });
+    if(!added) return alert('No new transactions found. Existing rows were skipped.');
+    persist(); renderAll(); alert(`${added} transaction${added===1?'':'s'} imported.`);
   };
   reader.readAsText(file);
 }
