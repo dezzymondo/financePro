@@ -6,7 +6,7 @@
 <title>FinancePro — Your Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#101c19">
 <link rel="icon" href="icon-192.png" type="image/png">
@@ -58,7 +58,29 @@
     <input class="pin-input" id="unlockPin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="4–6 digits">
     <div class="auth-error" id="pinError" role="alert"></div>
     <button class="btn btn-primary auth-submit" onclick="unlockApp()">Unlock</button>
+    <button class="btn auth-google" id="biometricUnlockBtn" type="button" onclick="unlockWithBiometric()">Use device biometrics</button>
     <button class="text-button" onclick="signOut()">Log out instead</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="securitySetupOverlay">
+  <div class="modal-card security-card">
+    <div class="brand-mark" style="margin-bottom:6px;"><span>Finance</span><span>Pro</span></div>
+    <div class="auth-kicker">Optional security</div>
+    <h2>Protect your ledger?</h2>
+    <p>Choose how you want to secure this browser. You can set a PIN, use device biometrics when supported, or skip this for now.</p>
+    <div class="field security-field">
+      <label for="setupPin">Create a 4–6 digit PIN</label>
+      <input type="password" id="setupPin" inputmode="numeric" maxlength="6" placeholder="PIN">
+    </div>
+    <div class="field security-field">
+      <label for="setupPinConfirm">Confirm PIN</label>
+      <input type="password" id="setupPinConfirm" inputmode="numeric" maxlength="6" placeholder="Repeat PIN">
+    </div>
+    <div class="auth-error" id="securitySetupError" role="alert"></div>
+    <button class="btn btn-primary auth-submit" onclick="setSecurityPin()">Set PIN</button>
+    <button class="btn auth-google" type="button" onclick="setupBiometric()">Use device biometrics</button>
+    <button class="text-button" type="button" onclick="skipSecuritySetup()">Skip for now</button>
   </div>
 </div>
 
@@ -69,7 +91,7 @@
     <h2>Welcome to your ledger.</h2>
     <p>FinancePro doesn't connect to your bank — it's a place you log money by hand, the moment it moves. Get paid, spend on food, send a transfer: add it here as an entry.</p>
     <p>Over time that builds a real picture: your balance, where money actually goes each month, whether you're within budget, and how close you are to what you're saving for.</p>
-    <p style="color:var(--ink-faint); font-size:12.5px;">Everything is stored only on this device. Nobody else can see it — but that also means it's worth exporting a backup now and then (Settings → Export).</p>
+    <p style="color:var(--ink-faint); font-size:12.5px;">Your ledger syncs privately with your account. You can also export a backup any time from Settings.</p>
     <button class="btn btn-primary" style="margin-top:8px;" onclick="dismissWelcome()">Get started</button>
   </div>
 </div>
@@ -478,7 +500,7 @@
   window.financeAuth = firebase.auth();
   window.financeDb = firebase.firestore();
 </script>
-<script src="script.js?v=8"></script>
+<script src="script.js?v=9"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

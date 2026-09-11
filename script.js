@@ -137,6 +137,7 @@ async function startSession(user){
   generateDueRecurring();
   renderAll();
   showWelcomeIfNeeded();
+  showSecuritySetupIfNeeded();
 }
 function signOut(){
   financeAuth.signOut();
@@ -149,6 +150,7 @@ function bootAuth(){
       state = createEmptyState();
       document.getElementById('welcomeOverlay').classList.remove('show');
       document.getElementById('pinOverlay').classList.remove('show');
+      document.getElementById('securitySetupOverlay').classList.remove('show');
       document.getElementById('authGate').style.display = 'flex';
       document.getElementById('authForm').reset();
       setAuthMode('login');
@@ -173,13 +175,25 @@ function hideToast(){
 
 /* ---------------- welcome modal (first visit) ---------------- */
 function showWelcomeIfNeeded(){
-  if(currentUser && !localStorage.getItem(`fp_seenWelcome_${currentUser.id}`)){
+  if(currentUser && !localStorage.getItem(`fp_seenWelcome_${currentUser.uid}`)){
     document.getElementById('welcomeOverlay').classList.add('show');
   }
 }
 function dismissWelcome(){
-  localStorage.setItem(`fp_seenWelcome_${currentUser.id}`, '1');
+  localStorage.setItem(`fp_seenWelcome_${currentUser.uid}`, '1');
   document.getElementById('welcomeOverlay').classList.remove('show');
+  showSecuritySetupIfNeeded();
+}
+
+function showSecuritySetupIfNeeded(){
+  if(!currentUser || localStorage.getItem(`fp_seenSecurity_${currentUser.uid}`)) return;
+  if(document.getElementById('welcomeOverlay').classList.contains('show')) return;
+  document.getElementById('securitySetupOverlay').classList.add('show');
+  updateBiometricButtons();
+}
+function skipSecuritySetup(){
+  localStorage.setItem(`fp_seenSecurity_${currentUser.uid}`, '1');
+  document.getElementById('securitySetupOverlay').classList.remove('show');
 }
 
 /* ---------------- section info toggles ---------------- */
@@ -752,6 +766,59 @@ function lockApp(){
   document.getElementById('unlockPin').value='';
   document.getElementById('pinError').textContent='';
   document.getElementById('pinOverlay').classList.add('show');
+}
+function setSecurityPin(){
+  const pin = document.getElementById('setupPin').value.trim();
+  const confirmPin = document.getElementById('setupPinConfirm').value.trim();
+  const error = document.getElementById('securitySetupError');
+  if(!/^\d{4,6}$/.test(pin)){ error.textContent='Use a 4–6 digit PIN.'; return; }
+  if(pin !== confirmPin){ error.textContent='The PINs do not match.'; return; }
+  localStorage.setItem(`fp_pin_${currentUser.uid}`, pin);
+  localStorage.setItem(`fp_seenSecurity_${currentUser.uid}`, '1');
+  document.getElementById('securitySetupOverlay').classList.remove('show');
+}
+function updateBiometricButtons(){
+  const supported = window.PublicKeyCredential && navigator.credentials;
+  document.querySelectorAll('#biometricUnlockBtn, #securitySetupOverlay button[onclick="setupBiometric()"]')
+    .forEach(button=>button.style.display = supported ? 'block' : 'none');
+}
+function randomBytes(size){
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
+function toBase64Url(bytes){
+  return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function fromBase64Url(value){
+  const padded = value.replace(/-/g,'+').replace(/_/g,'/') + '==='.slice((value.length+3)%4);
+  return Uint8Array.from(atob(padded), char=>char.charCodeAt(0));
+}
+async function setupBiometric(){
+  const error = document.getElementById('securitySetupError');
+  if(!window.PublicKeyCredential || !navigator.credentials){ error.textContent='Biometrics are not supported in this browser.'; return; }
+  try {
+    const credential = await navigator.credentials.create({publicKey:{
+      challenge:randomBytes(32),
+      rp:{name:'FinancePro', id:location.hostname},
+      user:{id:randomBytes(16), name:currentUser.email || currentUser.uid, displayName:'FinancePro user'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},
+      timeout:60000,
+      attestation:'none'
+    }});
+    localStorage.setItem(`fp_biometric_${currentUser.uid}`, toBase64Url(credential.rawId));
+    localStorage.setItem(`fp_seenSecurity_${currentUser.uid}`, '1');
+    document.getElementById('securitySetupOverlay').classList.remove('show');
+  } catch(errorObject){ error.textContent = errorObject.name === 'NotAllowedError' ? 'Biometric setup was cancelled.' : 'Biometric setup is unavailable on this device.'; }
+}
+async function unlockWithBiometric(){
+  const credentialId = localStorage.getItem(`fp_biometric_${currentUser.uid}`);
+  if(!credentialId) return;
+  try {
+    await navigator.credentials.get({publicKey:{challenge:randomBytes(32), allowCredentials:[{type:'public-key',id:fromBase64Url(credentialId)}], userVerification:'required', timeout:60000}});
+    document.getElementById('pinOverlay').classList.remove('show');
+  } catch(errorObject){ document.getElementById('pinError').textContent = errorObject.name === 'NotAllowedError' ? 'Biometric unlock was cancelled.' : 'Biometric unlock failed.'; }
 }
 function setSettingsStatus(message, isError=false){
   const status = document.getElementById('pinStatus');

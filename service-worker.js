@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financepro-v8-phone-refresh';
+const CACHE_NAME = 'financepro-v9-security-choice';
 const ASSETS = [
   './index.html',
   './style.css',
