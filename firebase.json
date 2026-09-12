@@ -4,6 +4,11 @@
     "ignore": [
       "firebase.json",
       "firestore.rules",
+      "android/**",
+      "www/**",
+      "package.json",
+      "package-lock.json",
+      "capacitor.config.json",
       "**/.*",
       "**/node_modules/**"
     ],
