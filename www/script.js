@@ -146,6 +146,7 @@ async function startSession(user){
     renderAll();
     showWelcomeIfNeeded();
     showSecuritySetupIfNeeded();
+    if(shouldAutoLock()) lockApp();
   } catch(error){
     currentUser = null;
     setAuthError(`Could not load your ledger: ${error.message || 'check your connection and try again.'}`);
@@ -167,6 +168,12 @@ function bootAuth(){
       document.getElementById('authForm').reset();
       setAuthMode('login');
     }
+  });
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){ hiddenAt = Date.now(); return; }
+    if(hiddenAt && Date.now() - hiddenAt >= 1000 && shouldAutoLock()) lockApp();
+    hiddenAt = 0;
   });
 }
 
@@ -198,7 +205,7 @@ function dismissWelcome(){
 }
 
 function showSecuritySetupIfNeeded(){
-  if(!currentUser || localStorage.getItem(`fp_seenSecurity_${currentUser.uid}`)) return;
+  if(!currentUser || localStorage.getItem(`fp_seenSecurity_${currentUser.uid}`) || shouldLock()) return;
   if(document.getElementById('welcomeOverlay').classList.contains('show')) return;
   document.getElementById('securitySetupOverlay').classList.add('show');
   updateBiometricButtons();
@@ -239,7 +246,7 @@ function fillFilterCategories(){
   const all = [...new Set([...state.transactions.map(t=>t.category), ...CATEGORIES.expense, ...CATEGORIES.income, ...state.customCategories.expense, ...state.customCategories.income])].sort();
   const sel = document.getElementById('filterCategory');
   const current = sel.value;
-  sel.innerHTML = '<option value="all">All categories</option>' + all.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.innerHTML = '<option value="all">All categories</option>' + all.map(c=>`<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
   if([...sel.options].some(o=>o.value===current)) sel.value = current;
 }
 
@@ -404,7 +411,7 @@ function renderRecurring(){
     <div class="recurring-row">
       <div>
         <div class="rr-info">${escapeHTML(r.desc)} — ${cur()}${fmt(r.amount)}</div>
-        <div class="rr-sub">${r.category} · ${escapeHTML(accountName(r.accountId))} · logs on day ${r.dayOfMonth} of each month${recurringReminder(r) ? ` · <span class="reminder">${recurringReminder(r)}</span>` : ''}</div>
+        <div class="rr-sub">${escapeHTML(r.category)} · ${escapeHTML(accountName(r.accountId))} · logs on day ${r.dayOfMonth} of each month${recurringReminder(r) ? ` · <span class="reminder">${recurringReminder(r)}</span>` : ''}</div>
       </div>
       <button onclick="stopRecurring('${r.id}')">Stop repeating</button>
     </div>`).join('');
@@ -790,7 +797,10 @@ function removePin(){
   document.getElementById('pinOverlay').classList.remove('show');
   setSettingsStatus('PIN removed.');
 }
-function shouldLock(){ return Boolean(currentUser && localStorage.getItem(`fp_pin_${currentUser.uid}`)); }
+function shouldLock(){ return Boolean(currentUser && (localStorage.getItem(`fp_pin_${currentUser.uid}`) || localStorage.getItem(`fp_biometric_${currentUser.uid}`))); }
+function shouldAutoLock(){
+  return Boolean(currentUser && shouldLock());
+}
 function lockApp(){
   if(!shouldLock()) return setSettingsStatus('Set a PIN first, then lock the app.', true);
   document.getElementById('unlockPin').value='';
